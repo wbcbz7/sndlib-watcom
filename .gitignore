@@ -1,0 +1,7 @@
+# preliminary .gitignore
+
+*.obj
+*.exe
+*.err
+*.lst
+*.map
