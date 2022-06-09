@@ -81,12 +81,12 @@ public:
     sndNonDmaBase(const char *name) : SoundDevice(name) {
         devinfo.clear();
         
-        isDetected = isIrq0Initialised = isInitialised = isPlaying = isPaused = false;
+        isDetected = isOpened = isIrq0Initialised = isInitialised = isPlaying = isPaused = false;
         currentPos = irqs = 0;
         oldTotalPos = 0;
 
         dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-        sampleRate = bytesPerSample = timerDivisor = 0;
+        sampleRate  = timerDivisor = 0;
         currentFormat = SND_FMT_NULL;
 
         dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL; convtab = NULL;
@@ -141,23 +141,26 @@ public:
     
     // stop playback
     virtual uint32_t stop();
-    
-    // deinit all this shit
+
+    // close playback
+    virtual uint32_t close();
+
+    // deinit device
     virtual uint32_t done();
     
 protected:
     
     // init IRQ0 stuff
-    virtual bool initIrq0();
+    bool initIrq0();
 
     // install IRQ0 handler
-    virtual bool setupIrq0();
+    bool setupIrq0();
 
     // uninstall IRQ0
-    virtual bool removeIrq0();
+    bool removeIrq0();
 
     // done IRQ0 stuff
-    virtual bool doneIrq0();
+    bool doneIrq0();
 
     // init port for playback
     virtual bool initPort() { return true; }
@@ -174,8 +177,9 @@ protected:
     // is device detected?
     bool            isDetected;
     bool            isIrq0Initialised;
-    bool            isInitialised;
-    bool            isPlaying;
+    bool            isInitialised;      // init() ................................ done()
+    bool            isOpened;           //        open() ................. close()
+    bool            isPlaying;          //               play() ... stop()
     bool            isPaused;
     
     // -------------------------- DMA stuff ------------------------
@@ -219,7 +223,6 @@ protected:
     
     soundFormat                 currentFormat;
     uint32_t                    sampleRate;
-    uint32_t                    bytesPerSample;
     
     // callback info
     soundDeviceCallback         callback;
@@ -279,8 +282,11 @@ public:
     
     // stop playback
     //virtual uint32_t stop();
-    
-    // deinit all this shit
+
+    // close playback
+    //virtual uint32_t close();
+
+    // deinit device
     //virtual uint32_t done();
 
 protected:
@@ -344,8 +350,11 @@ public:
     
     // stop playback
     //virtual uint32_t stop();
-    
-    // deinit all this shit
+
+    // close playback
+    //virtual uint32_t close();
+
+    // deinit device
     //virtual uint32_t done();
 
 protected:
@@ -353,7 +362,7 @@ protected:
     // scan BIOS data area and fixup BIOS LPT resources
     virtual void scanBDA();
 
-    // fill covox crap
+    // fill covox stuff
     virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
 
 };
@@ -403,13 +412,16 @@ public:
     
     // stop playback
     //virtual uint32_t stop();
-    
-    // deinit all this shit
+
+    // close playback
+    //virtual uint32_t close();
+
+    // deinit device
     //virtual uint32_t done();
 
 protected:
 
-    // fill covox crap
+    // fill covox stuff
     virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
 
 };
@@ -465,8 +477,11 @@ public:
     
     // stop playback
     //virtual uint32_t stop();
-    
-    // deinit all this shit
+
+    // close playback
+    //virtual uint32_t close();
+
+    // deinit device
     //virtual uint32_t done();
 
 protected:
@@ -477,6 +492,6 @@ protected:
     // deinit port
     virtual bool donePort();
 
-    // fill covox crap
+    // fill covox stuff
     virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
 };

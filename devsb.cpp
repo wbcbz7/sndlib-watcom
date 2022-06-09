@@ -206,9 +206,8 @@ uint32_t sbTimeConstant(int32_t rate) {
 uint32_t udivRound(uint32_t a, uint32_t b);
 #pragma aux udivRound = \
         "xor edx, edx"  "div ebx"       "shr ebx, 1" \
-        "cmp ebx, eax"  "jb  _skip_inc" "inc eax" \
+        "cmp edx, ebx"  "jb  _skip_inc" "inc eax" \
         "_skip_inc:" parm [eax] [ebx] value [eax] modify [eax ebx edx]
-
 
 uint32_t sbTimeConstantAccurate(uint32_t rate) {
     if (rate < 4000) return 0; 

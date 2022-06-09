@@ -84,14 +84,17 @@ extern _dpmi_rmregs         snddev_irq0_callback_registers;                 // c
 extern uint8_t*             snddev_rm_lock_start, snddev_rm_lock_end;       // start/end of locked range
 }
 
+// round(a / b)
+uint32_t udivRound(uint32_t a, uint32_t b);
+#pragma aux udivRound = \
+        "xor edx, edx"  "div ebx"       "shr ebx, 1" \
+        "cmp edx, ebx"  "jb  _skip_inc" "inc eax" \
+        "_skip_inc:" parm [eax] [ebx] value [eax] modify [eax ebx edx]
+
 // get closest timer divisor
 inline uint32_t honkGetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
-    int tc = (0x1234DD / rate);
-    
-    // check which time constant is more accurate
-    if (abs(rate - (0x1234DD / tc)) > abs(rate - (0x1234DD / (tc + 1)))) tc++;
-    return tc;
+    return udivRound(0x1234DD, rate);
 }
 
 bool sndNonDmaBase::initIrq0() {
@@ -286,9 +289,8 @@ bool sndNonDmaBase::doneIrq0() {
 sndNonDmaBase::~sndNonDmaBase()
 {
     if (isPlaying) stop();
+    if (isOpened) close();
     if (isInitialised) done();
-    // remove all irq0 stuff
-    if (isIrq0Initialised) doneIrq0();
 }
 
 uint32_t sndNonDmaBase::init(SoundDevice::deviceInfo* info)
@@ -310,6 +312,9 @@ uint32_t sndNonDmaBase::init(SoundDevice::deviceInfo* info)
     // init IRQ0 structures
     if (initIrq0() == false) return SND_ERR_NOTFOUND;
 
+    // phew :)
+    isInitialised = true;
+
     return SND_ERR_OK;
 }
 
@@ -320,13 +325,13 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     if (isPlaying) stop();
 
     // clear converter info
-    memset(&convinfo, 0, sizeof(convinfo));
+    memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
     if (flags & SND_OPEN_NOCONVERT) {
         // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     }
     else {
@@ -343,36 +348,37 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
 
         newFormat = (devinfo.caps->format & SND_FMT_SIGN_MASK) | (newFormat & ~SND_FMT_SIGN_MASK);
 
-        if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
     // pass converter info
 #ifdef DEBUG_LOG
     printf("devinfo.caps->format = 0x%x, src = 0x%x, dst = 0x%x\n", devinfo.caps->format, fmt, newFormat);
 #endif
-    if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    convinfo.bytesPerSample = getBytesPerSample(newFormat);
+
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
+
+    // we have all relevant info for opening sound device, do it now
+    if (isOpened) close();
 
     // premultiply bufferSize by bytesPerSample
-    bufferSize *= convinfo.bytesPerSample;
+    bufferSize *= conv->bytesPerSample;
 
 #ifdef DEBUG_LOG
-    printf("bytes per sample = %d\n", convinfo.bytesPerSample);
+    printf("bytes per sample = %d\n", conv->bytesPerSample);
 #endif
 
     // check for bufsize
     if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
-
-    // we have all relevant info for opening sound device, do it now
-    done();
 
     // save dma info
     dmaBufferCount = 2;
     dmaBufferSize = bufferSize;
     dmaBlockSize = dmaBufferSize * 2;
     dmaCurrentPtr = dmaBufferPtr = 0;
-    dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
-    dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
+    dmaBufferSamples = dmaBufferSize / conv->bytesPerSample;
+    dmaBlockSamples  = dmaBlockSize  / conv->bytesPerSample;
 
     // allocate DMA buffer
     if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
@@ -410,21 +416,20 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
 #ifdef DEBUG_LOG
     printf("xlat table = %08X\n", convtab);
 #endif
-    convinfo.parm2 = (uint32_t)convtab;
+    conv->parm2 = (uint32_t)convtab;
 
     // pass coverter info
-    memcpy(conv, &convinfo, sizeof(convinfo));
+    memcpy(&convinfo, conv, sizeof(convinfo));
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
-    this->bytesPerSample = convinfo.bytesPerSample;
 
     // debug output
 #ifdef DEBUG_LOG
     fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
 #endif
 
-    isInitialised = true;
+    isOpened = true;
     return SND_ERR_OK;
 }
 
@@ -436,6 +441,7 @@ uint64_t sndNonDmaBase::getPos() {
     else return 0;
 }
 
+// TODO: put stack switch here?
 void sndNonDmaBase::callbackBouncer() {
     snd_activeDevice[0]->irqProc();
 }
@@ -453,7 +459,7 @@ bool sndNonDmaBase::irqProc() {
         currentPos += dmaBlockSamples;
     }
 
-    // DON'T acknowledge interrupts!
+    // DON'T acknowledge interrupts! (done already by the IRQ0 routine)
 
     // get address of block to fill
     unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
@@ -558,7 +564,7 @@ uint32_t sndNonDmaBase::stop() {
     return SND_ERR_OK;
 }
 
-uint32_t sndNonDmaBase::done() {
+uint32_t sndNonDmaBase::close() {
     // stop playback
     if (isPlaying) stop();
 
@@ -580,11 +586,21 @@ uint32_t sndNonDmaBase::done() {
     }
 
     // fill with defaults
-    isInitialised = isPlaying = false;
+    isOpened = isPlaying = false;
     currentPos = irqs = 0;
     dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-    sampleRate = bytesPerSample = timerDivisor = 0;
+    sampleRate =  timerDivisor = 0;
     currentFormat = SND_FMT_NULL;
+
+    return SND_ERR_OK;
+}
+
+uint32_t sndNonDmaBase::done() {
+    if (isOpened) close();
+
+    // remove all irq0 stuff
+    if (isIrq0Initialised) doneIrq0();
+    isInitialised = isIrq0Initialised = false;
 
     return SND_ERR_OK;
 }

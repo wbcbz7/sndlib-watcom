@@ -122,6 +122,12 @@ uint32_t SoundDevice::stop()
     return SND_ERR_OK;
 }
 
+uint32_t SoundDevice::close()
+{
+    return SND_ERR_OK;
+}
+
+
 uint32_t SoundDevice::done()
 {
     return SND_ERR_OK;
@@ -251,7 +257,6 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
                 conv->proc   = &sndconv_16m_xlat;
                 conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80008000 : 0;
                 conv->format = dstfmt;
-                printf("a? %08X\n", conv->parm);
                 return SND_ERR_OK;
             }
         } else 
@@ -296,27 +301,38 @@ void __interrupt __far snd_irqStaticProc() {
             lss     esp, [snddev_pm_stack_top]
         }
 
-        // todo: chaining
-        snd_activeDevice[0]->irqProc();
-        
-        // switch it back
-        _asm {
-            lss     esp, [snddev_pm_old_stack]
-        }
+        // duplicate code for atomicity
+        if (snd_activeDevice[0]->irqProc() == false) {
+            // EOI handled by us, return from interrupt
+            // switch it back
+            _asm {
+                lss     esp, [snddev_pm_old_stack]
+            }
 
-        snddev_pm_old_stack = NULL;
-        snddev_pm_stack_in_use--;
-    } else _chain_intr(snd_activeDevice[0]->irq.oldhandler); 
+            snddev_pm_old_stack = NULL;
+            snddev_pm_stack_in_use--;
+            return;
+
+        } else {
+            // switch it back
+            _asm {
+                lss     esp, [snddev_pm_old_stack]
+            }
+
+            snddev_pm_old_stack = NULL;
+            snddev_pm_stack_in_use--;
+        }
+    }
+    _chain_intr(snd_activeDevice[0]->irq.oldhandler); 
 };     
 
-// active device storasge
+// active device storage
 SoundDevice *snd_activeDevice[16]; 
 
 // device IRQ detection structure
 volatile IrqDetectInfo snd_IrqDetectInfo;
 
 #ifdef SNDDEV_IRQ_PER_DEVICE
-// generate 16 trampolines for each interrupt                                                                  
 
 #define MAKE_IRQPROC(num)                                               \
 void __interrupt __far snd_irqStaticProc##num () {                      \

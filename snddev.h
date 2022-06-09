@@ -159,10 +159,13 @@ public:
     // stop playback
     virtual uint32_t stop();
     
-    // deinit all this shit
+    // close playback
+    virtual uint32_t close();
+
+    // deinit device
     virtual uint32_t done();
 
-    // ---------------- interrupt crap ------------------
+    // ---------------- interrupt stuff ------------------
     
     // IRQ stuff info
     irqEntry        irq;
