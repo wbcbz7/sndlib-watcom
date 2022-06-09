@@ -10,7 +10,7 @@
    some useful DPMI functions
    by wbcbz7 zo.oz.zolb - l5.ll.zozl
 
-    this mostly covers frequently used DPMI 0.9 calls (+ some 1.0), and some DOS extender vendor extensions
+    this mostly covers frequently used DPMI 0.9 calls (+ some 1.0), and several DOS extender vendor extensions
     it was never meant to be a complete DPMI adapter, so if you have something missing here, feel free to
     add it by yourself :)
     
@@ -26,7 +26,7 @@ static _dpmi_rmregs dpmi_rmregs;
 // dpmi status (carry flag)
 unsigned int dpmi_status;
 
-// dpmi fucntions return code (few servers support them, i.e. DOS/32A does)
+// dpmi functions return code (few servers support them, i.e. DOS/32A does)
 unsigned int dpmi_returncode;
 
 
@@ -1695,6 +1695,14 @@ void dpmi_unlockmemory(void *p, unsigned long size) {
     dpmi_returncode = dpmi_regs.w.ax;
 }
 
+// a very common adopted yield() via INT2F/AX=1680
+void dpmi_yield() {
+    _asm {
+        mov     eax, 0x1680
+        int     0x2f
+    }
+}
+
 // dpmi realmode interrupt caller using REGS\SREGS structures
 // WARNING: be careful with pointing to memory structures because they MUST
 // be located in DOS memory area, not in extendend memory!
@@ -2038,9 +2046,7 @@ _dos32a_performance_counters _far *dos32a_get_performance_counters(void _far (*a
 // DJGPP compatibility stuff
 #ifdef _DPMI_DJGPP_COMPATIBILITY
 
-void __dpmi_yield(void) {
-    // TODO: call INT2F/AX=1680
-}
+void __dpmi_yield(void) { dpmi_yield(); }
 
 int	__dpmi_allocate_ldt_descriptors(int _count) {
     int rtn = dpmi_getdescriptors(_count);

@@ -177,6 +177,8 @@ int rmint386(int intnum, union REGS *in, union REGS *out);
 int rmint386x(int intnum, union REGS *in, union REGS *out, struct SREGS *seg);
 void rmintr(int intnum, union REGPACK *r);
 
+void dpmi_yield();
+
 extern unsigned int dpmi_status;
 extern unsigned int dpmi_returncode;
 
