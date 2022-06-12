@@ -14,7 +14,7 @@ AS       = nasm.exe
 CC       = wpp386.exe
 LD       = wlink.exe
 AFLAGS   = -f win32 -l $<.lst
-CFLAGS   = -5r -fp5 -fpi87 -zp16 -onhasbmir -s -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
+CFLAGS   = -5r -fp5 -fpi87 -zp16 -onhasbmi -s -zv -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
 #CFLAGS   = -5r -fp5 -fpi87 -zp16 -oneatxh -s -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
 LFLAGS   =
 

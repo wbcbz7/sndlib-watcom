@@ -1,7 +1,7 @@
 #ifndef __IRQ_H__
 #define __IRQ_H__
 
-#ifdef __DOS__
+#if (defined(_DOS) || defined(__DOS__))
 
 #include <i86.h>
 #include <dos.h>

@@ -4,7 +4,6 @@
 ; non-DMA IRQ0 routines -- wbcbz7 o7.lz.zozo-zl.o5.zozz
 
 ; actually, as you can see, pc speaker and covox use same irq0 proc actually, only snddev_irq0_struct.dataport is changed
-; TODO: dual covox/stereo-on-1 support?
 
 ; since fasm doesn't like mixing 16- and 32bit code in COFF (cuz' officially COFF doesn't support 16bit code!), i'll use nasm and assemble it to OMF
 
@@ -222,24 +221,6 @@ _snddev_stereo1_irq0_proc_rm:
             ISR_RM_PROLOGUE
             
             ; here goes device-specific stuff...
-
-%ifdef STEREO_ON_1_FT2_PROTOCOL
-            ; left channel
-            mov         al, 1
-            add         dx, 2
-            out         dx, al
-            sub         dx, 2
-            mov         al, [es:si+bx]
-            out         dx, al
-
-            ; right channel
-            mov         al, 2
-            add         dx, 2
-            out         dx, al
-            sub         dx, 2
-            mov         al, [es:si+bx+1]
-            out         dx, al
-%else
             ; left channel
             mov         al, [es:si+bx]
             out         dx, al
@@ -258,7 +239,6 @@ _snddev_stereo1_irq0_proc_rm:
             out         dx, al
             xor         ax, ax
             out         dx, al
-%endif
 
             add         si, 2
             
@@ -458,23 +438,6 @@ _snddev_stereo1_irq0_proc_pm:
             ISR_PM_PROLOGUE
             
             ; here goes device-specific stuff...
-%ifdef STEREO_ON_1_FT2_PROTOCOL
-            ; left channel
-            mov         al, 1
-            add         edx, 2
-            out         dx, al
-            sub         edx, 2
-            mov         al, [ecx + esi]
-            out         dx, al
-
-            ; right channel
-            mov         al, 2
-            add         edx, 2
-            out         dx, al
-            sub         edx, 2
-            mov         al, [ecx + esi + 1]
-            out         dx, al
-%else
             ; left channel
             mov         al, [ecx + esi]
             out         dx, al
@@ -493,7 +456,6 @@ _snddev_stereo1_irq0_proc_pm:
             out         dx, al
             xor         eax, eax
             out         dx, al
-%endif
 
             add         esi, 2
             

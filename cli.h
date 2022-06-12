@@ -4,7 +4,7 @@
 #include <conio.h>
 #include <i86.h>
 
-#ifdef __DOS__
+#if (defined(_DOS) || defined(__DOS__))
 
 unsigned long pushf();
 #pragma aux pushf = "pushfd" "pop eax" value [eax] modify [eax]
