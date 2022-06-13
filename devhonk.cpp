@@ -369,7 +369,7 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     dmaBufferCount = 2;
     dmaBufferSize = bufferSize;
     dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
     dmaBufferSamples = dmaBufferSize / conv->bytesPerSample;
     dmaBlockSamples  = dmaBlockSize  / conv->bytesPerSample;
 
@@ -434,7 +434,6 @@ uint64_t sndNonDmaBase::getPos() {
     else return 0;
 }
 
-// TODO: put stack switch here?
 void sndNonDmaBase::callbackBouncer() {
     snd_activeDevice[0]->irqProc();
 }
@@ -479,18 +478,19 @@ uint32_t sndNonDmaBase::start() {
     {
         if (callback == NULL) return SND_ERR_NULLPTR;
 #ifdef DEBUG_LOG
-        logdebug("prefill...\n");
+        printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
         switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: return SND_ERR_NO_DATA;
+            case callbackOk         : break;
+            case callbackSkip       : 
+            case callbackComplete   : 
+            case callbackAbort      : 
+            default : return SND_ERR_NO_DATA;
         }
+        renderPos += dmaBlockSamples;
 #ifdef DEBUG_LOG
-        logdebug("done\n");
+        printf("done\n");
 #endif
     }
 
@@ -499,7 +499,7 @@ uint32_t sndNonDmaBase::start() {
     *patchTable->pm_patch_dt = chain_acc;
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaBufferPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
 
     // install IRQ0 and start playback
     if (initPort() == false) {
@@ -529,8 +529,8 @@ uint32_t sndNonDmaBase::stop() {
     isPlaying = false;
 
     // clear playing position
-    currentPos = irqs = 0;
-    dmaCurrentPtr = dmaCurrentBuffer = dmaBufferPtr = 0;
+    currentPos = renderPos = irqs = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
 
     return SND_ERR_OK;
 }
@@ -557,10 +557,9 @@ uint32_t sndNonDmaBase::close() {
     }
 
     // fill with defaults
-    isOpened = isPlaying = false;
-    currentPos = irqs = 0;
-    dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-    sampleRate =  timerDivisor = 0;
+    isOpened = false;
+    dmaBlockSize = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = 0;
+    sampleRate = timerDivisor = 0;
     currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
@@ -696,6 +695,7 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
 
 // --------------------------------------
 // Dual Covox aka Dual LPT DAC, stereo
+
 uint32_t sndDualCovox::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();

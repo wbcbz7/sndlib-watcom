@@ -214,8 +214,8 @@ class DmaBufferDevice : public SoundDevice {
 public:
     DmaBufferDevice(const char* _name) : SoundDevice(_name) {
         currentPos = irqs = 0;
-        oldTotalPos = 0;
-        dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
+        oldTotalPos = renderPos = 0;
+        dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
         dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL;
     }
     virtual ~DmaBufferDevice() {};
@@ -225,9 +225,10 @@ protected:
     // -------------------------- DMA stuff ------------------------
     
     // getPos() previous values
-    uint64_t        oldTotalPos;                // previous total buffer pos
+    uint64_t        oldTotalPos;                // previous total playback pos
 
-    uint64_t        currentPos;                 // total buffer pos
+    uint64_t        currentPos;                 // total playback  pos
+    uint64_t        renderPos;                  // total rendering pos
     uint64_t        irqs;                       // total IRQs count
     
     // each block contains one or more buffers (2 in our case)
@@ -243,8 +244,7 @@ protected:
     uint32_t        dmaBufferSamples;           // size of each buffer (in samples)
 
     uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
-    uint32_t        dmaCurrentBuffer;           // current buffer count
-    uint32_t        dmaBufferPtr;               // points to current free buffer
+    uint32_t        dmaRenderPtr;               // points to current rendering buffer
 
     // IRQ->callback caller
     virtual bool    irqCallbackCaller();

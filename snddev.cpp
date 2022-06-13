@@ -286,22 +286,38 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
 // DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
 // -----------------------------------------------
 bool DmaBufferDevice::irqCallbackCaller() {
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
+    soundDeviceCallbackResult rtn;
 
     // adjust playptr
     irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
+
+    // STACK POPIERDOLOLO
+    if ((snddev_pm_stack_in_use == 0) && (snddev_pm_old_stack == NULL)) {
+        snddev_pm_stack_in_use++;
+        
+        // switch stack
+        _asm {
+            mov     word  ptr   [snddev_pm_old_stack + 4], ss
+            mov     dword ptr   [snddev_pm_old_stack + 0], esp
+            lss     esp, [snddev_pm_stack_top]
+        }
+        
+        // call callback
+        // fill only previously played block
+        rtn = callback((uint8_t*)dmaBlock.ptr + dmaRenderPtr, sampleRate, dmaBufferSamples,
+                &convinfo, renderPos, userdata);
+                
+        // switch back
+        _asm {
+            lss     esp, [snddev_pm_old_stack]
+        }
+
+        snddev_pm_old_stack = NULL;
+        snddev_pm_stack_in_use--;
     }
 
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    // call callback
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
+    // test return code
+#if 0
     switch (rtn) {
         case callbackOk: break;
         case callbackSkip:
@@ -309,6 +325,15 @@ bool DmaBufferDevice::irqCallbackCaller() {
         case callbackAbort:
         default: stop();                   // race condition?
     }
+#endif
+
+    // adjust dmabuffers
+    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
+        dmaCurrentPtr = 0;
+        currentPos += dmaBlockSamples;
+    }
+    dmaRenderPtr += dmaBufferSize; renderPos += dmaBufferSamples; if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+
     return rtn == callbackOk;
 };
 
@@ -331,43 +356,12 @@ bool SoundDevice::irqProc() {
     return true;
 }
 
-// STACK POPIERDOLOLO
+
 void __interrupt __far snd_irqStaticProc() {   
-    // reentrancy test
-    if ((snddev_pm_stack_in_use == 0) && (snddev_pm_old_stack == NULL)) {
-        snddev_pm_stack_in_use++;
-        
-        // switch stack
-        _asm {
-            mov     word  ptr   [snddev_pm_old_stack + 4], ss
-            mov     dword ptr   [snddev_pm_old_stack + 0], esp
-            lss     esp, [snddev_pm_stack_top]
-        }
-
-        // duplicate code for atomicity
-        if (snd_activeDevice[0]->irqProc() == false) {
-            // EOI handled by us, return from interrupt
-            // switch it back
-            _asm {
-                lss     esp, [snddev_pm_old_stack]
-            }
-
-            snddev_pm_old_stack = NULL;
-            snddev_pm_stack_in_use--;
-            return;
-
-        } else {
-            // switch it back
-            _asm {
-                lss     esp, [snddev_pm_old_stack]
-            }
-
-            snddev_pm_old_stack = NULL;
-            snddev_pm_stack_in_use--;
-        }
-    }
-    _chain_intr(snd_activeDevice[0]->irq.oldhandler); 
-};     
+    if (snd_activeDevice[0]->irqProc() == false) 
+        return;
+    else _chain_intr(snd_activeDevice[0]->irq.oldhandler);
+}
 
 // active device storage
 SoundDevice *snd_activeDevice[16]; 

@@ -384,7 +384,7 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
     dmaBufferCount = 2;
     dmaBufferSize = bufferSize;
     dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
     dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
     dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
 
@@ -451,7 +451,7 @@ uint32_t sndProAudioSpectrum::done() {
     // fill with defaults
     isInitialised = isPlaying = false;
     currentPos = irqs = 0;
-    dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
     sampleRate = 0;
     currentFormat = SND_FMT_NULL;
 
@@ -477,23 +477,24 @@ uint32_t sndProAudioSpectrum::start() {
     {
         if (callback == NULL) return SND_ERR_NULLPTR;
 #ifdef DEBUG_LOG
-        logdebug("prefill...\n");
+        printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
         switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: return SND_ERR_NO_DATA;
+            case callbackOk         : break;
+            case callbackSkip       : 
+            case callbackComplete   : 
+            case callbackAbort      : 
+            default : return SND_ERR_NO_DATA;
         }
+        renderPos += dmaBlockSamples;
 #ifdef DEBUG_LOG
-        logdebug("done\n");
+        printf("done\n");
 #endif
     }
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaBufferPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
 
     // check if 16 bit transfer
     dmaChannel = devinfo.dma;
@@ -599,8 +600,8 @@ uint32_t sndProAudioSpectrum::stop() {
     isPlaying = false;
 
     // clear playing position
-    currentPos = irqs = 0;
-    dmaCurrentPtr = dmaCurrentBuffer = dmaBufferPtr = 0;
+    currentPos = renderPos = irqs = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
 
     return SND_ERR_OK;
 }
@@ -608,21 +609,6 @@ uint32_t sndProAudioSpectrum::stop() {
 uint32_t sndProAudioSpectrum::ioctl(uint32_t function, void* data, uint32_t len)
 {
     return SND_ERR_UNSUPPORTED;
-}
-
-uint64_t sndProAudioSpectrum::getPos() {
-    // apparently, we can read out current position from i8253 sample counter, but i'll do it usual way - via DMA counters
-
-    if (isPlaying) {
-        volatile uint64_t totalPos = 0; uint32_t timeout = 300;
-        // quick and dirty rewind bug fix :D
-        do {
-            totalPos = currentPos + ((dmaBlockSize - (dmaGetPos(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0))) / convinfo.bytesPerSample);
-        } while ((totalPos < oldTotalPos) && (--timeout != 0));
-        oldTotalPos = totalPos;
-        return totalPos;
-    }
-    else return 0;
 }
 
 // irq procedure

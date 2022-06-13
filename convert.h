@@ -24,7 +24,7 @@ enum soundDeviceCallbackResult {
 };
 
 // callback definition
-typedef soundDeviceCallbackResult(*soundDeviceCallback)(void* buffer, uint32_t bufferSize, soundFormatConverterInfo *fmt, uint32_t sampleRate, void* userPtr);
+typedef soundDeviceCallbackResult(*soundDeviceCallback)(void* buffer, uint32_t sampleRate, uint32_t bufferSize, soundFormatConverterInfo *fmt, uint64_t bufferPos, void* userPtr);
 
 int __sndconvcall sndconv_memcpy_shl(void *dst, void *src, uint32_t length, uint32_t div, uint32_t);
 

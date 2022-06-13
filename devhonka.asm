@@ -157,10 +157,6 @@ endstruc
             ; restart
             mov         ax, [snddev_irq0_struct.bufferlen]
             mov         [ds:snddev_irq0_struct.bufferlencur], ax
-        
-            ; check if RMCB/PM stack in use (TODO: make it work in 16bit code)
-            ;cmp         byte [cs:snddev_pm_stack_in_use], 0
-            ;jnz         .rmcb_busy
 
             ; call callback
             call        far [snddev_irq0_struct.rm_callback]
@@ -361,31 +357,17 @@ _snddev_pm_lock_start:
             ; restart
             mov         eax, [ebx + snddev_irq0_struct.bufferlen]
             mov         [ebx + snddev_irq0_struct.bufferlencur], eax
-        
-            ; call callback
-            cmp         byte [_snddev_pm_stack_in_use], 0
-            jnz         .exit
-            inc         byte [_snddev_pm_stack_in_use]
-
-            ; switch stacks
-            mov         word  [_snddev_pm_old_stack + 4], ss
-            mov         dword [_snddev_pm_old_stack],     esp
-            lss         esp, [_snddev_pm_stack_top]
 
             push        es
             mov         eax, ds
             mov         es, eax
             
+            ; warning: uses 32 bytes (2 paras) of stack 
             pusha
             call        near [ebx + snddev_irq0_struct.pm_callback]
             popa
             pop         es
 
-            ; switch back
-            lss         esp, [_snddev_pm_old_stack]
-
-            dec         byte [_snddev_pm_stack_in_use]
-.exit:
             ; return
             pop         ecx
             pop         edx
@@ -509,13 +491,6 @@ _snddev_irq0_callback:
             push        es
             pop         ds
 
-            inc         byte [_snddev_pm_stack_in_use]
-            
-            ; switch stacks
-            mov         word  [_snddev_pm_old_stack + 4], ss
-            mov         dword [_snddev_pm_old_stack],     esp
-            lss         esp, [_snddev_pm_stack_top]
-
             ; enable interrupts (we don't want squacking sounds)
             sti
 
@@ -525,11 +500,6 @@ _snddev_irq0_callback:
 _snddev_irq0_callback_dataofs   equ $-4
             call        near [eax + snddev_irq0_struct.pm_callback]
             pop         edi
-
-            ; switch back
-            lss         esp, [_snddev_pm_old_stack]
-
-            dec         byte [_snddev_pm_stack_in_use]
 
             cli
 .exit:
@@ -574,9 +544,15 @@ _snddev_irq0_callback_registers:
             resb            dpmi_realmode_registers_size
 
 ; RMCB "in use" flag
+global _snddev_pm_rmcb_in_use
+_snddev_pm_rmcb_in_use:
+            resb            1
+
+; stack "in use" flag
 global _snddev_pm_stack_in_use
 _snddev_pm_stack_in_use:
-            resb            0
+            resb            1
+
 
 _snddev_bss_lock_end:
 ; -----------------------------------

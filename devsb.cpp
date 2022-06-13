@@ -512,7 +512,7 @@ uint32_t sndSBBase::done() {
     // fill with defaults
     isInitialised = isPlaying = false;
     currentPos = irqs = 0;
-    dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaCurrentPtr = dmaRenderPtr = 0;
     sampleRate = 0;
     currentFormat = SND_FMT_NULL;
 
@@ -661,7 +661,7 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     dmaBufferCount = 2;
     dmaBufferSize = bufferSize;
     dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
     dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
     dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
 
@@ -736,7 +736,7 @@ uint32_t sndSoundBlaster2Pro::start() {
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
         switch (rtn) {
             case callbackOk         : break;
             case callbackSkip       : 
@@ -744,13 +744,14 @@ uint32_t sndSoundBlaster2Pro::start() {
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
+        renderPos += dmaBlockSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
     
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaBufferPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
     
     // acknowledge stuck IRQs
     sbAck8Bit(devinfo.iobase);
@@ -847,8 +848,8 @@ uint32_t sndSoundBlaster2Pro::stop() {
     isPlaying = false;
     
     // clear playing position
-    currentPos = irqs = 0;
-    dmaCurrentPtr = dmaCurrentBuffer = dmaBufferPtr = 0;
+    currentPos = renderPos = irqs = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
     
     return SND_ERR_OK;
 }
@@ -948,7 +949,7 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     dmaBufferCount = 2;
     dmaBufferSize = bufferSize;
     dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
     dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
     dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
 
@@ -1007,26 +1008,27 @@ uint32_t sndSoundBlaster16::start() {
     isPaused = true;
 
     // call callback to fill buffer with sound data
-    {
+   {
         if (callback == NULL) return SND_ERR_NULLPTR;
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
         switch (rtn) {
-            case callbackOk: break;
-            case callbackSkip:
-            case callbackComplete:
-            case callbackAbort:
-            default: return SND_ERR_NO_DATA;
+            case callbackOk         : break;
+            case callbackSkip       : 
+            case callbackComplete   : 
+            case callbackAbort      : 
+            default : return SND_ERR_NO_DATA;
         }
+        renderPos += dmaBlockSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaBufferPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
 
     // reset DSP
     if (sbDspReset(devinfo.iobase) == false) return SND_ERR_INVALIDCONFIG;
@@ -1093,8 +1095,8 @@ uint32_t sndSoundBlaster16::stop() {
     isPlaying = false;
 
     // clear playing position
-    currentPos = irqs = 0;
-    dmaCurrentPtr = dmaCurrentBuffer = dmaBufferPtr = 0;
+    currentPos = renderPos = irqs = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
 
     return SND_ERR_OK;
 }
@@ -1289,7 +1291,7 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     dmaBufferCount = 2;
     dmaBufferSize = bufferSize;
     dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaBufferPtr = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
     dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
     dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
 
@@ -1353,21 +1355,22 @@ uint32_t sndESSAudioDrive::start() {
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
         switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: return SND_ERR_NO_DATA;
+            case callbackOk         : break;
+            case callbackSkip       : 
+            case callbackComplete   : 
+            case callbackAbort      : 
+            default : return SND_ERR_NO_DATA;
         }
+        renderPos += dmaBlockSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaBufferPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
 
     // acknowledge stuck IRQs
     sbAck8Bit(devinfo.iobase);
@@ -1515,8 +1518,8 @@ uint32_t sndESSAudioDrive::stop() {
     isPlaying = false;
 
     // clear playing position
-    currentPos = irqs = 0;
-    dmaCurrentPtr = dmaCurrentBuffer = dmaBufferPtr = 0;
+    currentPos = renderPos = irqs = 0;
+    dmaCurrentPtr = dmaRenderPtr = 0;
 
     return SND_ERR_OK;
 }
