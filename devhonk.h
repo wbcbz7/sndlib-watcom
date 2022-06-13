@@ -74,20 +74,13 @@ extern "C" {
 };
 
 // base non-DMA device driver
-class sndNonDmaBase : public SoundDevice {
+class sndNonDmaBase : public DmaBufferDevice {
     
 public:
     // constructor (nothing fancy here)
-    sndNonDmaBase(const char *name) : SoundDevice(name) {
-        devinfo.clear();
-        
+    sndNonDmaBase(const char *name) : DmaBufferDevice(name) {
         isDetected = isOpened = isIrq0Initialised = isInitialised = isPlaying = isPaused = false;
-        currentPos = irqs = 0;
-        oldTotalPos = 0;
-
-        dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-        sampleRate  = timerDivisor = 0;
-        currentFormat = SND_FMT_NULL;
+        timerDivisor = 0;
 
         dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL; convtab = NULL;
         irq0struct = NULL; rmCallback.ptr = NULL; patchTable = NULL;
@@ -105,7 +98,7 @@ public:
         devinfo.capsLen   = 0;
         devinfo.flags     = 0;
     }
-    virtual ~sndNonDmaBase();
+    virtual ~sndNonDmaBase() {}
     
     /*
     // get device name
@@ -174,35 +167,9 @@ protected:
     // done conversion table
     virtual bool doneConversionTab() { return true; }
 
-    // is device detected?
-    bool            isDetected;
+    // flags
     bool            isIrq0Initialised;
-    bool            isInitialised;      // init() ................................ done()
-    bool            isOpened;           //        open() ................. close()
-    bool            isPlaying;          //               play() ... stop()
-    bool            isPaused;
-    
-    // -------------------------- DMA stuff ------------------------
-    
-    // getPos() previous values
-    uint64_t        oldTotalPos;                // previous total buffer pos
 
-    uint64_t        currentPos;                 // total buffer pos
-    uint64_t        irqs;                       // total IRQs count
-    
-    // each block contains one or more buffers (2 in our case)
-    dmaBlock        dmaBlock;
-    uint32_t        dmaBlockSize;
-    uint32_t        dmaBlockSamples;            // size in samples
-    
-    uint32_t        dmaBufferCount;             // num of buffers inside one block
-    uint32_t        dmaBufferSize;              // size of each buffer
-    uint32_t        dmaBufferSamples;           // size of each buffer (in samples)
-
-    uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
-    uint32_t        dmaCurrentBuffer;           // current buffer count
-    uint32_t        dmaBufferPtr;               // points to current free buffer
-    
     // --------------------- IRQ0 handler stuff -----------------------
 
     // patch table pointer
@@ -217,17 +184,6 @@ protected:
     _dpmi_rmpointer         oldIrq0RealMode;
     void __interrupt __far (*oldIrq0ProtectedMode)();
     uint32_t                timerDivisor;
-
-    // ----------------------------------------------------------------
-    // current format
-    
-    soundFormat                 currentFormat;
-    uint32_t                    sampleRate;
-    
-    // callback info
-    soundDeviceCallback         callback;
-    void                       *userdata;
-    soundFormatConverterInfo    convinfo;
     
     // --------------------------- IRQ stuff --------------------
     

@@ -282,6 +282,49 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
     return SND_ERR_UNKNOWN_FORMAT;
 }
 
+// -----------------------------------------------
+// DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
+// -----------------------------------------------
+bool DmaBufferDevice::irqCallbackCaller() {
+    // get address of block to fill
+    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
+
+    // adjust playptr
+    irqs++;
+    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
+        dmaCurrentPtr = 0;
+        currentPos += dmaBlockSamples;
+    }
+
+    // adjust dmabuffer
+    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
+    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
+
+    // call callback
+    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
+    switch (rtn) {
+        case callbackOk: break;
+        case callbackSkip:
+        case callbackComplete:
+        case callbackAbort:
+        default: stop();                   // race condition?
+    }
+    return rtn == callbackOk;
+};
+
+uint64_t IsaDmaDevice::getPos() {
+    if (isPlaying) {
+        volatile uint64_t totalPos = 0; uint32_t timeout = 300;
+        // quick and dirty rewind bug fix :D
+        do {
+            totalPos = currentPos + ((dmaBlockSize - (dmaGetPos(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0))) / convinfo.bytesPerSample);
+        } while ((totalPos < oldTotalPos) && (--timeout != 0));
+        oldTotalPos = totalPos;
+        return totalPos;
+    }
+    else return 0;
+}
+
 // IRQ procedures
 
 bool SoundDevice::irqProc() {

@@ -661,13 +661,6 @@ uint32_t sndWindowsSoundSystem::setFormat(SoundDevice::deviceInfo* info, uint32_
     return SND_ERR_UNSUPPORTED;
 }
 
-
-sndWindowsSoundSystem::~sndWindowsSoundSystem()
-{
-    if (isPlaying) stop();
-    if (isInitialised) done();
-}
-
 uint32_t sndWindowsSoundSystem::detect(SoundDevice::deviceInfo* info) {
 
     // clear and fill device info
@@ -787,8 +780,7 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
-    this->bytesPerSample = convinfo.bytesPerSample;
-
+    
     // debug output
 #ifdef DEBUG_LOG
     fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
@@ -822,7 +814,7 @@ uint32_t sndWindowsSoundSystem::done() {
     isInitialised = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-    sampleRate = bytesPerSample = 0;
+    sampleRate = 0;
     currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
@@ -849,7 +841,7 @@ uint32_t sndWindowsSoundSystem::start() {
 #ifdef DEBUG_LOG
         logdebug("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSize / convinfo.bytesPerSample, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
         switch (rtn) {
         case callbackOk: break;
         case callbackSkip:
@@ -881,12 +873,11 @@ uint32_t sndWindowsSoundSystem::start() {
     logdebug("dma ready\n");
 #endif
 
-    uint32_t dmaBufferSamples = dmaBufferSamples - 1;  // testme
     // start playback
     
     // load block length
-    wssRegWrite(devinfo.iobase, WSS_REG_DMA_COUNT_LOW,  dmaBufferSamples & 0xFF);
-    wssRegWrite(devinfo.iobase, WSS_REG_DMA_COUNT_HIGH, dmaBufferSamples >> 8);
+    wssRegWrite(devinfo.iobase, WSS_REG_DMA_COUNT_LOW,  (dmaBufferSamples - 1) & 0xFF);
+    wssRegWrite(devinfo.iobase, WSS_REG_DMA_COUNT_HIGH, (dmaBufferSamples - 1) >> 8);
     
     // ENABLE interrupts
     wssRegWrite(devinfo.iobase, WSS_REG_PIN_CTRL,         wssRegRead(devinfo.iobase, WSS_REG_PIN_CTRL)         | 2);
@@ -975,35 +966,14 @@ uint32_t sndWindowsSoundSystem::stop() {
 
 // irq procedure
 bool sndWindowsSoundSystem::irqProc() {
-    // adjust playptr
-    irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
-    }
-
     // acknowledge interrupt
     outp(devinfo.iobase + 2, 0);
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
-    
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    // call callback
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
-    switch (rtn) {
-    case callbackOk: break;
-    case callbackSkip:
-    case callbackComplete:
-    case callbackAbort:
-    default: stop();                   // race condition?
-    }
+    // advance play pointers, call callback
+    irqCallbackCaller();
     
     return false;   // we're handling EOI by itself
 }

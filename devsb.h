@@ -15,23 +15,15 @@
 #include "sndioctl.h"
 
 // base SB driver
-class sndSBBase : public SoundDevice {
+class sndSBBase : public IsaDmaDevice {
     
 public:
     // constructor (nothing fancy here)
-    sndSBBase(const char *name) : SoundDevice(name) {
-        devinfo.clear();
-
+    sndSBBase(const char *name) : IsaDmaDevice(name) {
         // fill with defaults
         isDetected = isInitialised = isPlaying = isPaused = false;
         currentPos = irqs = 0;
         oldTotalPos = 0;
-
-        dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples= dmaCurrentPtr = dmaBufferPtr = 0;
-        sampleRate = bytesPerSample = 0;
-        currentFormat = SND_FMT_NULL;
-        
-        dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL;
 
         devinfo.name = getName();
         devinfo.version = NULL;
@@ -43,8 +35,7 @@ public:
         devinfo.flags     = 0;
     }
     virtual ~sndSBBase() {
-        if (isPlaying) stop();
-        if (isInitialised) done();
+
     }
     
     // get device name
@@ -73,26 +64,21 @@ public:
     virtual uint32_t pause();
     */
     // get playback position in samples
-    virtual uint64_t getPos();
+    //virtual uint64_t getPos();
     
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
     
-    /*
     // stop playback
-    virtual uint32_t stop();
-    */
-    // deinit all this shit
-    virtual uint32_t done();
+    //virtual uint32_t stop();
     
+    // close playback
+    //virtual uint32_t close();
+
+    // deinit device
+    virtual uint32_t done();
 
 protected:
-    
-    // is device detected?
-    bool            isDetected;
-    bool            isInitialised;
-    bool            isPlaying;
-    bool            isPaused;
 
     // DSP version
     uint32_t        dspVersion;
@@ -111,42 +97,6 @@ protected:
     
     // convert DSP version to string
     virtual const char* dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
-    
-    // -------------------------- DMA stuff ------------------------
-    
-    // getPos() previous values
-    uint64_t        oldTotalPos;                // previous total buffer pos
-
-    uint64_t        currentPos;                 // total buffer pos
-    uint64_t        irqs;                       // total IRQs count
-    
-    // each block contains one or more buffers (2 in our case)
-    
-    uint32_t        dmaChannel;                 // active dma channel (hey SB16)
-    
-    dmaBlock        dmaBlock;
-    uint32_t        dmaBlockSize;
-    uint32_t        dmaBlockSamples;            // size in samples
-    
-    uint32_t        dmaBufferCount;             // num of buffers inside one block
-    uint32_t        dmaBufferSize;              // size of each buffer
-    uint32_t        dmaBufferSamples;           // size of each buffer (in samples)
-
-    uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
-    uint32_t        dmaCurrentBuffer;           // current buffer count
-    uint32_t        dmaBufferPtr;               // points to current free buffer
-    
-    // ----------------------------------------------------------------
-    // current format
-    
-    soundFormat     currentFormat;
-    uint32_t        sampleRate;
-    uint32_t        bytesPerSample;
-    
-    // callback info
-    soundDeviceCallback       callback;
-    void                     *userdata;
-    soundFormatConverterInfo  convinfo;
     
     // --------------------------- IRQ stuff --------------------
     

@@ -7,6 +7,7 @@
 
 #include "convert.h"
 #include "irq.h"
+#include "dma.h"
 
 // init sound library (called before any device using)
 uint32_t sndlibInit();
@@ -112,10 +113,18 @@ public:
     
 public:
     // constructor (nothing fancy here)
-    SoundDevice(const char* _name) : name(_name), inIrq(false) {
-        memset(&irq, 0, sizeof(irqEntry));
+    SoundDevice(const char* _name) :
+        name(_name), inIrq(false), currentFormat(SND_FMT_NULL), sampleRate(0),
+        callback(NULL), userdata(NULL) {
+        memset(&irq,        0, sizeof(irqEntry));
+        memset(&convinfo,   0, sizeof(convinfo));
+        devinfo.clear();
     }
-    virtual ~SoundDevice() {};
+    virtual ~SoundDevice() {
+        if (isPlaying) stop();
+        if (isOpened) close();
+        if (isInitialised) done();
+    };
     
     // get device name
     virtual const char *getName();
@@ -177,9 +186,82 @@ public:
     virtual bool    irqProc();
     
 protected:
-    // device info
-    SoundDevice::deviceInfo devinfo;
+    // ---------- internal running state flags ----------
+    bool            isDetected;         // set by detect()
+    bool            isInitialised;      // init() ................................ done()
+    bool            isOpened;           //        open() ................. close()
+    bool            isPlaying;          //               play() ... stop()
+    bool            isPaused;           //               pause() .. play()
+
+
+    // ------------------ device info --------------------
+    SoundDevice::deviceInfo     devinfo;
     
+    // ------------ format and callback info -------------
+    soundFormat                 currentFormat;
+    uint32_t                    sampleRate;
+
+    // callback info
+    soundDeviceCallback         callback;
+    void*                       userdata;
+    soundFormatConverterInfo    convinfo;
+
+};
+
+// -----------------------------------------------
+// DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
+class DmaBufferDevice : public SoundDevice {
+public:
+    DmaBufferDevice(const char* _name) : SoundDevice(_name) {
+        currentPos = irqs = 0;
+        oldTotalPos = 0;
+        dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
+        dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL;
+    }
+    virtual ~DmaBufferDevice() {};
+
+protected:
+
+    // -------------------------- DMA stuff ------------------------
+    
+    // getPos() previous values
+    uint64_t        oldTotalPos;                // previous total buffer pos
+
+    uint64_t        currentPos;                 // total buffer pos
+    uint64_t        irqs;                       // total IRQs count
+    
+    // each block contains one or more buffers (2 in our case)
+    
+    uint32_t        dmaChannel;                 // active dma channel (hey SB16)
+    
+    dmaBlock        dmaBlock;
+    uint32_t        dmaBlockSize;
+    uint32_t        dmaBlockSamples;            // size in samples
+    
+    uint32_t        dmaBufferCount;             // num of buffers inside one block
+    uint32_t        dmaBufferSize;              // size of each buffer
+    uint32_t        dmaBufferSamples;           // size of each buffer (in samples)
+
+    uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
+    uint32_t        dmaCurrentBuffer;           // current buffer count
+    uint32_t        dmaBufferPtr;               // points to current free buffer
+
+    // IRQ->callback caller
+    virtual bool    irqCallbackCaller();
+};
+
+// ISA DMA device
+class IsaDmaDevice : public DmaBufferDevice {
+public:
+    IsaDmaDevice(const char* _name) : DmaBufferDevice(_name), dmaChannel(-1) {}
+    virtual ~IsaDmaDevice() {};
+
+    // get playback position in samples
+    virtual uint64_t getPos();
+
+protected:
+    uint32_t        dmaChannel;         // sometimes different formats require different DMA channels (hey SB16)
+
 };
 
 

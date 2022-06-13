@@ -91,12 +91,11 @@ enum {
 
 
 // base WSS driver
-class sndWindowsSoundSystem : public SoundDevice {
+class sndWindowsSoundSystem : public IsaDmaDevice {
     
 public:
     // constructor (nothing fancy here)
-    sndWindowsSoundSystem() : SoundDevice("Windows Sound System") {
-        devinfo.clear();
+    sndWindowsSoundSystem() : IsaDmaDevice("Windows Sound System") {
 
         // fill with defaults
         isDetected = isInitialised = isPlaying = isGus = is64khz = isVariableSampleRate = isPaused = false;
@@ -104,12 +103,6 @@ public:
         oldId = newId = extId = 0;
 
         isVariableAvail = true;
-        currentPos = irqs = 0;
-        dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBlockSamples = dmaBufferSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-        sampleRate = bytesPerSample = 0;
-        currentFormat = SND_FMT_NULL;
-
-        dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL;
 
         devinfo.name = getName();
         devinfo.version = NULL;
@@ -120,7 +113,9 @@ public:
         devinfo.capsLen = 0;
         devinfo.flags = 0;
     }
-    virtual ~sndWindowsSoundSystem();
+    virtual ~sndWindowsSoundSystem() {
+
+    }
 
     // get device name
     // virtual const char    *getName();
@@ -196,41 +191,6 @@ protected:
 
     // get codec version
     virtual bool getCodecVersion(SoundDevice::deviceInfo* info);
-
-    // -------------------------- DMA stuff ------------------------
-
-    uint64_t        oldTotalPos;                // previous total buffer pos
-
-    uint64_t        currentPos;
-    uint64_t        irqs;
-
-    // each block contains one or more buffers (2 in our case)
-
-    uint32_t        dmaChannel;                 // active dma channel (hey SB16)
-
-    dmaBlock        dmaBlock;
-    uint32_t        dmaBlockSize;
-    uint32_t        dmaBlockSamples;            // size in samples
-    
-    uint32_t        dmaBufferCount;             // num of buffers inside one block
-    uint32_t        dmaBufferSize;              // size of each buffer
-    uint32_t        dmaBufferSamples;           // size of each buffer (in samples)
-
-    uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
-    uint32_t        dmaCurrentBuffer;           // current buffer count
-    uint32_t        dmaBufferPtr;               // points to current free buffer
-
-    // ----------------------------------------------------------------
-    // current format
-
-    soundFormat     currentFormat;
-    uint32_t        sampleRate;
-    uint32_t        bytesPerSample;
-
-    // callback info
-    soundDeviceCallback       callback;
-    void* userdata;
-    soundFormatConverterInfo  convinfo;
 
     // --------------------------- IRQ stuff --------------------
 

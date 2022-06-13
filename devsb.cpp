@@ -212,46 +212,19 @@ uint32_t udivRound(uint32_t a, uint32_t b);
 uint32_t sbTimeConstantAccurate(uint32_t rate) {
     if (rate < 4000) return 0; 
     uint32_t tc = udivRound(1000000, rate);
-    
-    // check which time constant is more accurate
-    //if (abs(rate - (1000000 / tc)) > abs(rate - (1000000 / (tc + 1)))) tc++;
 
     return 256 - tc;
 }
 
 uint32_t essGetDivisor(uint32_t rate) {    
-    int tc = 0;
-    if (rate > 22222) {
-        tc = (795500 / rate);
-        // check which time constant is more accurate
-        if (abs(rate - (795500 / tc)) > abs(rate - (795500 / (tc + 1)))) tc++;
-        tc = 256 - tc;
-    } else {
-        tc = (397700 / rate);
-        // check which time constant is more accurate
-        if (abs(rate - (397700 / tc)) > abs(rate - (397700 / (tc + 1)))) tc++;
-        tc = 128 - tc;
-    };
-    
-    return tc;
+    if (rate < 4000) return 0; 
+    return (rate > 22222) ? 256 - udivRound(795500, rate) : 128 - udivRound(397700, rate);
 }
 
 // ES1869 only: supports accurate clock rate for 48 kHz
-uint32_t ess1869GetDivisor(int32_t rate) {
-    int tc = 0;
-    if ((rate % 8000) == 0) {
-        tc = (768000 / rate);
-        // check which time constant is more accurate
-        if (abs(rate - (768000 / tc)) > abs(rate - (768000 / (tc + 1)))) tc++;
-        tc = 256 - tc;
-    } else {
-        tc = (793800 / rate);
-        // check which time constant is more accurate
-        if (abs(rate - (793800 / tc)) > abs(rate - (793800 / (tc + 1)))) tc++;
-        tc = 128 - tc;
-    };
-    
-    return tc;
+uint32_t ess1869GetDivisor(uint32_t rate) {
+    if (rate < 4000) return 0; 
+    return ((rate % 8000) == 0) ? 256 - udivRound(768000, rate) : 128 - udivRound(793800, rate);
 }
 
 bool sbDspReset(uint32_t base) {
@@ -540,7 +513,7 @@ uint32_t sndSBBase::done() {
     isInitialised = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-    sampleRate = bytesPerSample = 0;
+    sampleRate = 0;
     currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
@@ -549,19 +522,6 @@ uint32_t sndSBBase::done() {
 const char* sndSBBase::getName()
 {
     return devinfo.name;
-}
-
-uint64_t sndSBBase::getPos() {
-    if (isPlaying) {
-        volatile uint64_t totalPos = 0; uint32_t timeout = 300;
-        // quick and dirty rewind bug fix :D
-        do {
-            totalPos = currentPos + ((dmaBlockSize - (dmaGetPos(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0))) / convinfo.bytesPerSample);
-        } while ((totalPos < oldTotalPos) && (--timeout != 0));
-        oldTotalPos = totalPos;
-        return totalPos;
-    }
-    else return 0;
 }
 
 uint32_t sndSBBase::ioctl(uint32_t function, void* data, uint32_t len)
@@ -735,7 +695,6 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     
     this->currentFormat  = newFormat;
     this->sampleRate     = sampleRate;
-    this->bytesPerSample = convinfo.bytesPerSample;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -777,7 +736,7 @@ uint32_t sndSoundBlaster2Pro::start() {
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSize / convinfo.bytesPerSample, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
         switch (rtn) {
             case callbackOk         : break;
             case callbackSkip       : 
@@ -896,35 +855,14 @@ uint32_t sndSoundBlaster2Pro::stop() {
 
 // irq procedure
 bool sndSoundBlaster2Pro::irqProc() {
-    // adjust playptr
-    irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
-    }
-
     // acknowledge dma interrupt
     sbAck8Bit(devinfo.iobase);
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
     
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
-    
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    // call callback
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
-    switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: stop();                   // race condition?
-    }
+    // advance play pointers, call callback
+    irqCallbackCaller();
 
     return false;   // we're handling EOI by itself
 }
@@ -1044,7 +982,6 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
-    this->bytesPerSample = convinfo.bytesPerSample;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -1075,7 +1012,7 @@ uint32_t sndSoundBlaster16::start() {
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSize / convinfo.bytesPerSample, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
         switch (rtn) {
             case callbackOk: break;
             case callbackSkip:
@@ -1185,33 +1122,12 @@ bool sndSoundBlaster16::irqProc() {
     // check and acknowledge sb interrupt
     if (intMask & (is16Bit ? 0x2 : 0x1) == 0) return true; else (is16Bit ? sbAck16Bit(devinfo.iobase) : sbAck8Bit(devinfo.iobase));
 
-    // adjust playptr
-    irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
-    }
-
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
+    // advance play pointers, call callback
+    irqCallbackCaller();
     
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    // call callback
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
-    switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: stop();                   // race condition?
-    }
-
     return false;   // we're handling EOI by itself
 }
 
@@ -1407,7 +1323,6 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
-    this->bytesPerSample = convinfo.bytesPerSample;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -1438,7 +1353,7 @@ uint32_t sndESSAudioDrive::start() {
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSize / convinfo.bytesPerSample, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
         switch (rtn) {
         case callbackOk: break;
         case callbackSkip:
@@ -1608,35 +1523,14 @@ uint32_t sndESSAudioDrive::stop() {
 
 // irq procedure
 bool sndESSAudioDrive::irqProc() {
-    // adjust playptr
-    irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
-    }
-
     // acknowledge interrupt
     sbAck8Bit(devinfo.iobase);
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
-
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    // call callback
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
-    switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: stop();                   // race condition?
-    }
+    // advance play pointers, call callback
+    irqCallbackCaller();
 
     return false;   // we're handling EOI by itself
 }

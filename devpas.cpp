@@ -15,7 +15,6 @@
 
 #define arrayof(x) (sizeof(x) / sizeof(x[0]))
 
-volatile static bool sndProAudioSpectrum::irqFound = false;
 const size_t probeDataLength = 100;
 const size_t probeIrqLength = 16;
 
@@ -301,12 +300,6 @@ bool sndProAudioSpectrum::pasReset(SoundDevice::deviceInfo* info)
     return true;
 }
 
-sndProAudioSpectrum::~sndProAudioSpectrum()
-{
-    if (isPlaying) stop();
-    if (isInitialised) done();
-}
-
 uint32_t sndProAudioSpectrum::detect(sndProAudioSpectrum::deviceInfo* info) {
 
     // clear and fill device info
@@ -425,7 +418,6 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
-    this->bytesPerSample = convinfo.bytesPerSample;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -460,7 +452,7 @@ uint32_t sndProAudioSpectrum::done() {
     isInitialised = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaBufferPtr = 0;
-    sampleRate = bytesPerSample = 0;
+    sampleRate = 0;
     currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
@@ -487,7 +479,7 @@ uint32_t sndProAudioSpectrum::start() {
 #ifdef DEBUG_LOG
         logdebug("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSize / convinfo.bytesPerSample, &convinfo, sampleRate, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, dmaBlockSamples, &convinfo, sampleRate, userdata); // fill entire buffer
         switch (rtn) {
         case callbackOk: break;
         case callbackSkip:
@@ -635,35 +627,14 @@ uint64_t sndProAudioSpectrum::getPos() {
 
 // irq procedure
 bool sndProAudioSpectrum::irqProc() {
-    // adjust playptr
-    irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
-    }
-
     // acknowledge interrupt
     pasRegWrite(devinfo.iobase, PAS_REG_INTRCTLRST, 0);
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
-    
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    // call callback
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
-    switch (rtn) {
-    case callbackOk: break;
-    case callbackSkip:
-    case callbackComplete:
-    case callbackAbort:
-    default: stop();                   // race condition?
-    }
+    // advance play pointers, call callback
+    irqCallbackCaller();
 
     return false;   // we're handling EOI by itself
 }

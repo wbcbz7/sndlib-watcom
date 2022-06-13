@@ -286,13 +286,6 @@ bool sndNonDmaBase::doneIrq0() {
     return true;
 }
 
-sndNonDmaBase::~sndNonDmaBase()
-{
-    if (isPlaying) stop();
-    if (isOpened) close();
-    if (isInitialised) done();
-}
-
 uint32_t sndNonDmaBase::init(SoundDevice::deviceInfo* info)
 {
     // deinit
@@ -452,31 +445,9 @@ uint32_t sndNonDmaBase::ioctl(uint32_t function, void *data, uint32_t len) {
 
 // irq procedure
 bool sndNonDmaBase::irqProc() {
-    // adjust playptr
-    irqs++;
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
-        currentPos += dmaBlockSamples;
-    }
+    // call callback
+    irqCallbackCaller();
 
-    // DON'T acknowledge interrupts! (done already by the IRQ0 routine)
-
-    // get address of block to fill
-    unsigned char* p = (unsigned char*)dmaBlock.ptr + dmaBufferPtr;
-    
-    // adjust dmabuffer
-    dmaCurrentBuffer++; if (dmaCurrentBuffer >= dmaBufferCount) dmaCurrentBuffer = 0;
-    dmaBufferPtr += dmaBufferSize; if (dmaBufferPtr >= dmaBlockSize) dmaBufferPtr = 0;
-
-    soundDeviceCallbackResult rtn = callback(p, dmaBufferSamples, &convinfo, sampleRate, userdata); // fill only previously played block
-    switch (rtn) {
-    case callbackOk: break;
-    case callbackSkip:
-    case callbackComplete:
-    case callbackAbort:
-    default: stop();                   // race condition?
-    }
-    
     return false;   // we're handling EOI by itself
 }
 
