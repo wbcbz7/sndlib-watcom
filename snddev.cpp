@@ -327,15 +327,57 @@ bool DmaBufferDevice::irqCallbackCaller() {
     }
 #endif
 
+    return rtn == callbackOk;
+};
+
+void DmaBufferDevice::irqAdvancePos() {
     // adjust dmabuffers
     dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
         dmaCurrentPtr = 0;
         currentPos += dmaBlockSamples;
     }
-    dmaRenderPtr += dmaBufferSize; renderPos += dmaBufferSamples; if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+    dmaRenderPtr += dmaBufferSize; renderPos += dmaBufferSamples;
+    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+}
 
-    return rtn == callbackOk;
-};
+uint32_t DmaBufferDevice::dmaBufferInit(uint32_t bufferSize, soundFormatConverterInfo *conv) {
+    // premultiply bufferSize by bytesPerSample
+    bufferSize *= conv->bytesPerSample;
+    
+    // check for bufsize
+    if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
+    
+    // save dma info
+    dmaChannel = devinfo.dma;
+    dmaBufferCount = 2;
+    dmaBufferSize = bufferSize;
+    dmaBlockSize = dmaBufferSize * 2;
+    dmaCurrentPtr = dmaRenderPtr = 0;
+    dmaBufferSamples = dmaBufferSize / conv->bytesPerSample;
+    dmaBlockSamples  = dmaBlockSize  / conv->bytesPerSample;
+
+    // allocate DMA buffer
+    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
+    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
+    
+    // lock DPMI memory for buffer
+    dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);
+
+    return SND_ERR_OK;
+}
+
+uint32_t DmaBufferDevice::dmaBufferFree() {
+    // deallocate DMA block
+    if (dmaBlock.ptr != NULL) {
+        dmaFree(&dmaBlock);
+        dmaBlock.ptr = NULL;
+    }
+
+    // unlock DPMI memory for buffer
+    dpmi_unlockmemory(dmaBlock.ptr, dmaBlockSize+64);
+
+    return SND_ERR_OK;
+}
 
 uint64_t IsaDmaDevice::getPos() {
     if (isPlaying) {

@@ -213,6 +213,7 @@ protected:
 class DmaBufferDevice : public SoundDevice {
 public:
     DmaBufferDevice(const char* _name) : SoundDevice(_name) {
+        dmaChannel = -1;
         currentPos = irqs = 0;
         oldTotalPos = renderPos = 0;
         dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
@@ -233,7 +234,7 @@ protected:
     
     // each block contains one or more buffers (2 in our case)
     
-    uint32_t        dmaChannel;                 // active dma channel (hey SB16)
+    uint32_t        dmaChannel;                 // sometimes different formats require different DMA channels (hey SB16)
     
     dmaBlock        dmaBlock;
     uint32_t        dmaBlockSize;
@@ -246,21 +247,29 @@ protected:
     uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
     uint32_t        dmaRenderPtr;               // points to current rendering buffer
 
+    // init DMA buffer
+    virtual uint32_t    dmaBufferInit(uint32_t bufferSize, soundFormatConverterInfo *conv);
+
+    // free DMA buffer
+    virtual uint32_t    dmaBufferFree();
+
+    // advance play/render pointers
+    virtual void        irqAdvancePos();
+
     // IRQ->callback caller
-    virtual bool    irqCallbackCaller();
+    virtual bool        irqCallbackCaller();
 };
 
 // ISA DMA device
 class IsaDmaDevice : public DmaBufferDevice {
 public:
-    IsaDmaDevice(const char* _name) : DmaBufferDevice(_name), dmaChannel(-1) {}
+    IsaDmaDevice(const char* _name) : DmaBufferDevice(_name) {}
     virtual ~IsaDmaDevice() {};
 
     // get playback position in samples
     virtual uint64_t getPos();
 
 protected:
-    uint32_t        dmaChannel;         // sometimes different formats require different DMA channels (hey SB16)
 
 };
 

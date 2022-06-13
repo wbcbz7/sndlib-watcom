@@ -493,15 +493,11 @@ uint32_t sndSBBase::done() {
     // stop playback
     if (isPlaying) stop();
 
-    // stop DMA and deallocate DMA block
+    // stop DMA
     if (dmaChannel != -1) dmaStop(dmaChannel);
-    if (dmaBlock.ptr != NULL) {
-        dmaFree(&dmaBlock);
-        dmaBlock.ptr = NULL;
-    }
 
-    // unlock DPMI memory for buffer
-    dpmi_unlockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    // deallocate DMA block
+    dmaBufferFree();
 
     // unhook irq if hooked
     if (irq.hooked) irqUnhook(&irq, false);
@@ -511,7 +507,7 @@ uint32_t sndSBBase::done() {
 
     // fill with defaults
     isInitialised = isPlaying = false;
-    currentPos = irqs = 0;
+    currentPos = renderPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaCurrentPtr = dmaRenderPtr = 0;
     sampleRate = 0;
     currentFormat = SND_FMT_NULL;
@@ -599,19 +595,20 @@ uint32_t sndSoundBlaster2Pro::detect(SoundDevice::deviceInfo *info) {
 }
 
 uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
+    uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
     
     // stooop!
     if (isPlaying) stop();
 
     // clear converter info
-    memset(&convinfo, 0, sizeof(convinfo));
+    memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
     if (flags & SND_OPEN_NOCONVERT) {
         // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
         
     } else {
         // conversion is allowed
@@ -630,7 +627,7 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
                     newFormat = SND_FMT_UNSIGNED | SND_FMT_INT8 | SND_FMT_MONO;
                     
                     // check if format supported
-                    if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+                    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
                     
                     break;
                     
@@ -644,33 +641,14 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
 #ifdef DEBUG_LOG
     printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
 #endif
-    if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    convinfo.bytesPerSample = getBytesPerSample(newFormat);
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
 
-    // premultiply bufferSize by bytesPerSample
-    bufferSize *= convinfo.bytesPerSample;
-    
-    // check for bufsize
-    if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
-    
     // we have all relevant info for opening sound device, do it now
     done();
-    
-    // save dma info
-    dmaChannel = devinfo.dma;
-    dmaBufferCount = 2;
-    dmaBufferSize = bufferSize;
-    dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaRenderPtr = 0;
-    dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
-    dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
 
     // allocate DMA buffer
-    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    
-    // lock DPMI memory for buffer
-    dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
     
     // install IRQ handler
     if (irq.hooked == false) {
@@ -691,7 +669,7 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     this->userdata = userdata;
 
     // pass coverter info
-    memcpy(conv, &convinfo, sizeof(convinfo));
+    memcpy(&convinfo, conv, sizeof(convinfo));
     
     this->currentFormat  = newFormat;
     this->sampleRate     = sampleRate;
@@ -744,14 +722,14 @@ uint32_t sndSoundBlaster2Pro::start() {
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
-        renderPos += dmaBlockSamples;
+        renderPos += dmaBufferSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
     
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
     
     // acknowledge stuck IRQs
     sbAck8Bit(devinfo.iobase);
@@ -856,6 +834,9 @@ uint32_t sndSoundBlaster2Pro::stop() {
 
 // irq procedure
 bool sndSoundBlaster2Pro::irqProc() {
+    // advance play pointers
+    irqAdvancePos();
+    
     // acknowledge dma interrupt
     sbAck8Bit(devinfo.iobase);
 
@@ -903,19 +884,20 @@ uint32_t sndSoundBlaster16::detect(SoundDevice::deviceInfo *info) {
 }
 
 uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
+    uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
     if (isPlaying) stop();
 
     // clear converter info
-    memset(&convinfo, 0, sizeof(convinfo));
+    memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
     if (flags & SND_OPEN_NOCONVERT) {
         // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     }
     else {
@@ -923,42 +905,23 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | SND_FMT_INT16;
-            if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
         } else 
-            if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
     // pass converter info
 #ifdef DEBUG_LOG
     printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
 #endif
-    if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    convinfo.bytesPerSample = getBytesPerSample(newFormat);
-
-    // premultiply bufferSize by bytesPerSample
-    bufferSize *= convinfo.bytesPerSample;
-
-    // check for bufsize
-    if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
 
     // we have all relevant info for opening sound device, do it now
     done();
 
-    // save dma info
-    dmaChannel = devinfo.dma;
-    dmaBufferCount = 2;
-    dmaBufferSize = bufferSize;
-    dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaRenderPtr = 0;
-    dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
-    dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
-
     // allocate DMA buffer
-    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
-
-    // lock DPMI memory for buffer
-    dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // install IRQ handler
     if (irq.hooked == false) {
@@ -979,7 +942,7 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     this->userdata = userdata;
 
     // pass coverter info
-    memcpy(conv, &convinfo, sizeof(convinfo));
+    memcpy(&convinfo, conv, sizeof(convinfo));
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
@@ -1021,14 +984,14 @@ uint32_t sndSoundBlaster16::start() {
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
-        renderPos += dmaBlockSamples;
+        renderPos += dmaBufferSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
 
     // reset DSP
     if (sbDspReset(devinfo.iobase) == false) return SND_ERR_INVALIDCONFIG;
@@ -1119,10 +1082,13 @@ uint32_t sndSoundBlaster16::fillIrqDma(SoundDevice::deviceInfo* info, uint32_t s
 // irq procedure
 bool sndSoundBlaster16::irqProc() {
     // check IRQ cause
-    uint8_t intMask = sbGetInterruptMask(devinfo.iobase);
+    if (sbGetInterruptMask(devinfo.iobase) & (is16Bit ? 0x2 : 0x1) == 0) return true;
+    
+    // advance play pointers
+    irqAdvancePos();
 
-    // check and acknowledge sb interrupt
-    if (intMask & (is16Bit ? 0x2 : 0x1) == 0) return true; else (is16Bit ? sbAck16Bit(devinfo.iobase) : sbAck8Bit(devinfo.iobase));
+    // acknowledge sb interrupt
+    (is16Bit ? sbAck16Bit(devinfo.iobase) : sbAck8Bit(devinfo.iobase));
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
@@ -1246,19 +1212,20 @@ uint32_t sndESSAudioDrive::detect(SoundDevice::deviceInfo* info) {
 }
 
 uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void* userdata, soundFormatConverterInfo* conv) {
+    uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
     if (isPlaying) stop();
 
     // clear converter info
-    memset(&convinfo, 0, sizeof(convinfo));
+    memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
     if (flags & SND_OPEN_NOCONVERT) {
         // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     }
     else {
@@ -1266,7 +1233,7 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | SND_FMT_INT16;
-            if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
         }
     }
 
@@ -1274,33 +1241,14 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
 #ifdef DEBUG_LOG
     printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
 #endif
-    if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    convinfo.bytesPerSample = getBytesPerSample(newFormat);
-
-    // premultiply bufferSize by bytesPerSample
-    bufferSize *= convinfo.bytesPerSample;
-
-    // check for bufsize
-    if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
 
     // we have all relevant info for opening sound device, do it now
     done();
-
-    // save dma info
-    dmaChannel = devinfo.dma;
-    dmaBufferCount = 2;
-    dmaBufferSize = bufferSize;
-    dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaRenderPtr = 0;
-    dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
-    dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
-
+    
     // allocate DMA buffer
-    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
-
-    // lock DPMI memory for buffer
-    dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // install IRQ handler
     if (irq.hooked == false) {
@@ -1321,7 +1269,7 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     this->userdata = userdata;
 
     // pass coverter info
-    memcpy(conv, &convinfo, sizeof(convinfo));
+    memcpy(&convinfo, conv, sizeof(convinfo));
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
@@ -1363,14 +1311,14 @@ uint32_t sndESSAudioDrive::start() {
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
-        renderPos += dmaBlockSamples;
+        renderPos += dmaBufferSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
 
     // acknowledge stuck IRQs
     sbAck8Bit(devinfo.iobase);
@@ -1526,13 +1474,16 @@ uint32_t sndESSAudioDrive::stop() {
 
 // irq procedure
 bool sndESSAudioDrive::irqProc() {
+    // advance play pointers
+    irqAdvancePos();
+
     // acknowledge interrupt
     sbAck8Bit(devinfo.iobase);
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
-    // advance play pointers, call callback
+    // call callback
     irqCallbackCaller();
 
     return false;   // we're handling EOI by itself

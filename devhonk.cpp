@@ -312,6 +312,7 @@ uint32_t sndNonDmaBase::init(SoundDevice::deviceInfo* info)
 }
 
 uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
+    uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
@@ -355,30 +356,8 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     // we have all relevant info for opening sound device, do it now
     if (isOpened) close();
 
-    // premultiply bufferSize by bytesPerSample
-    bufferSize *= conv->bytesPerSample;
-
-#ifdef DEBUG_LOG
-    printf("bytes per sample = %d\n", conv->bytesPerSample);
-#endif
-
-    // check for bufsize
-    if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
-
-    // save dma info
-    dmaBufferCount = 2;
-    dmaBufferSize = bufferSize;
-    dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaRenderPtr = 0;
-    dmaBufferSamples = dmaBufferSize / conv->bytesPerSample;
-    dmaBlockSamples  = dmaBlockSize  / conv->bytesPerSample;
-
     // allocate DMA buffer
-    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
-
-    // lock DPMI memory for buffer
-    dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // set callback variables
     irq0struct->bufferseg       = (uint16_t)(((uint32_t)dmaBlock.ptr & 0xF0000) >> 4);
@@ -390,10 +369,6 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     // set irqproc
     snd_activeDevice[0] = this;
     inIrq = false;
-
-    // save callback info
-    this->callback = callback;
-    this->userdata = userdata;
 
     // fill conversion table, pass and link it to convinfo
     timerDivisor = honkGetDivisor(sampleRate);
@@ -410,6 +385,10 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     printf("xlat table = %08X\n", convtab);
 #endif
     conv->parm2 = (uint32_t)convtab;
+
+    // save callback info
+    this->callback = callback;
+    this->userdata = userdata;
 
     // pass coverter info
     memcpy(&convinfo, conv, sizeof(convinfo));
@@ -444,6 +423,9 @@ uint32_t sndNonDmaBase::ioctl(uint32_t function, void *data, uint32_t len) {
 
 // irq procedure
 bool sndNonDmaBase::irqProc() {
+    // advance play pointers
+    irqAdvancePos();
+
     // call callback
     irqCallbackCaller();
 
@@ -488,7 +470,7 @@ uint32_t sndNonDmaBase::start() {
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
-        renderPos += dmaBlockSamples;
+        renderPos += dmaBufferSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
@@ -499,7 +481,7 @@ uint32_t sndNonDmaBase::start() {
     *patchTable->pm_patch_dt = chain_acc;
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
 
     // install IRQ0 and start playback
     if (initPort() == false) {
@@ -538,15 +520,9 @@ uint32_t sndNonDmaBase::stop() {
 uint32_t sndNonDmaBase::close() {
     // stop playback
     if (isPlaying) stop();
-
-    // unlock DPMI memory for buffer
-    dpmi_unlockmemory(dmaBlock.ptr, dmaBlockSize+64);
-
+    
     // deallocate DMA block
-    if (dmaBlock.ptr != NULL) {
-        dmaFree(&dmaBlock);
-        dmaBlock.ptr = NULL;
-    }
+    dmaBufferFree();
 
     // deinit conversion table
     if (doneConversionTab() == false) {

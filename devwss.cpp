@@ -701,6 +701,7 @@ uint32_t sndWindowsSoundSystem::init(SoundDevice::deviceInfo* info)
 }
 
 uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void* userdata, soundFormatConverterInfo* conv) {
+    uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
@@ -732,30 +733,11 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     convinfo.bytesPerSample = getBytesPerSample(newFormat);
 
-    // premultiply bufferSize by bytesPerSample
-    bufferSize *= convinfo.bytesPerSample;
-
-    // check for bufsize
-    if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
-
     // we have all relevant info for opening sound device, do it now
     done();
 
-    // save dma info
-    dmaChannel = devinfo.dma;
-    dmaBufferCount = 2;
-    dmaBufferSize = bufferSize;
-    dmaBlockSize = dmaBufferSize * 2;
-    dmaCurrentPtr = dmaRenderPtr = 0;
-    dmaBufferSamples = dmaBufferSize / convinfo.bytesPerSample;
-    dmaBlockSamples  = dmaBlockSize  / convinfo.bytesPerSample;
-
     // allocate DMA buffer
-    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    
-    // lock DPMI memory for buffer
-    dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // install IRQ handler
     if (irq.hooked == false) {
@@ -794,15 +776,11 @@ uint32_t sndWindowsSoundSystem::done() {
     // stop playback
     if (isPlaying) stop();
 
-    // stop DMA and deallocate DMA block
+    // stop DMA
     if (dmaChannel != -1) dmaStop(dmaChannel);
-    if (dmaBlock.ptr != NULL) {
-        dmaFree(&dmaBlock);
-        dmaBlock.ptr = NULL;
-    }
     
-    // unlock DPMI memory for buffer
-    dpmi_unlockmemory(dmaBlock.ptr, dmaBlockSize+64);
+    // deallocate DMA block
+    dmaBufferFree();
 
     // unhook irq if hooked
     if (irq.hooked) irqUnhook(&irq, false);
@@ -849,14 +827,14 @@ uint32_t sndWindowsSoundSystem::start() {
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
-        renderPos += dmaBlockSamples;
+        renderPos += dmaBufferSamples;
 #ifdef DEBUG_LOG
         printf("done\n");
 #endif
     }
 
     // reset vars
-    currentPos = irqs = dmaCurrentPtr = dmaRenderPtr = 0;
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
 
     // check if 16 bit transfer
     dmaChannel = devinfo.dma;
@@ -951,13 +929,16 @@ uint32_t sndWindowsSoundSystem::stop() {
 
 // irq procedure
 bool sndWindowsSoundSystem::irqProc() {
+    // advance play pointers
+    irqAdvancePos();
+
     // acknowledge interrupt
     outp(devinfo.iobase + 2, 0);
 
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
-    // advance play pointers, call callback
+    // call callback
     irqCallbackCaller();
     
     return false;   // we're handling EOI by itself
