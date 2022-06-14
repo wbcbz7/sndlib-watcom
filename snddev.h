@@ -78,37 +78,18 @@ public:
         // private buffer for copied strings/etc
         char                            privateBuf[64];
         
-        void clear() {
-            memset(privateBuf, sizeof(privateBuf), 0);
-            name = version = NULL; caps = NULL;
-            iobase = iobase2 = irq = irq2 = dma = dma2 = pci.addr = -1;
-            maxBufferSize = flags = capsLen = 0;
-        }
+        // clear struct
+        void clear();
 
         // fix private buffer pointers
-        void privFixup(const deviceInfo& rhs) {
-            if ((name >= rhs.privateBuf) && (name < rhs.privateBuf + sizeof(privateBuf))) 
-                name += (privateBuf - rhs.privateBuf);
-            if ((version >= rhs.privateBuf) && (version < rhs.privateBuf + sizeof(privateBuf))) 
-                version += (privateBuf - rhs.privateBuf);
-            if (((const char*)caps >= rhs.privateBuf) && ((const char*)caps < rhs.privateBuf + sizeof(privateBuf))) 
-                caps = (const soundFormatCapability*)((const char*)caps + (privateBuf - rhs.privateBuf));
-        }
+        void privFixup(const deviceInfo& rhs);
 
         // regular constructor
         deviceInfo() { clear(); }
 
         // copy constructor
-        deviceInfo(const deviceInfo& rhs) {
-            memcpy(this, &rhs, sizeof(deviceInfo));
-            privFixup(rhs);
-        }
-
-        deviceInfo operator=(const deviceInfo& rhs) {
-            memcpy(this, &rhs, sizeof(deviceInfo));
-            privFixup(rhs);
-            return *this;
-        }
+        deviceInfo(const deviceInfo& rhs);
+        deviceInfo operator=(const deviceInfo& rhs);
     };
     
 public:
@@ -155,10 +136,13 @@ public:
     
     // start playback (won't return immediately, calls callback to fill DMA buffer)
     virtual uint32_t start();
-    
-    // pause playback (start() for resume)
+
+    // pause playback (start() or resume() for resume)
     virtual uint32_t pause();
     
+    // resume playback
+    virtual uint32_t resume();
+
     // get playback position in samples
     virtual uint64_t getPos();
     

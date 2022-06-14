@@ -82,7 +82,7 @@ public:
         isDetected = isOpened = isIrq0Initialised = isInitialised = isPlaying = isPaused = false;
         timerDivisor = 0;
 
-        dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL; convtab = NULL;
+        convtab = NULL;
         irq0struct = NULL; rmCallback.ptr = NULL; patchTable = NULL;
         irq0structBlock.segment  = irq0structBlock.selector  = NULL;
         realModeISRBlock.segment = realModeISRBlock.selector = NULL;
@@ -123,8 +123,11 @@ public:
     // start playback (won't return immediately, calls callback to fill DMA buffer)
     virtual uint32_t start();
     
-    // pause playback (start() for resume)
+    // pause playback (start() or resume() for resume)
     virtual uint32_t pause();
+    
+    // resume playback
+    virtual uint32_t resume();
     
     // get playback position in samples
     virtual uint64_t getPos();

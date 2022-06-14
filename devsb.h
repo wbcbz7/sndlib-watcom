@@ -62,6 +62,10 @@ public:
     
     // pause playback (start() for resume)
     virtual uint32_t pause();
+
+    // resume playback
+    
+
     */
     // get playback position in samples
     //virtual uint64_t getPos();

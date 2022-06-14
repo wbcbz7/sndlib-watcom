@@ -92,13 +92,17 @@ uint32_t udivRound(uint32_t a, uint32_t b);
         "_skip_inc:" parm [eax] [ebx] value [eax] modify [eax ebx edx]
 
 // get closest timer divisor
-inline uint32_t honkGetDivisor(uint32_t rate) {
+uint32_t honkGetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
     return udivRound(0x1234DD, rate);
 }
 
 bool sndNonDmaBase::initIrq0() {
     if (isIrq0Initialised) return true;
+
+    // help watcom to allocate registers :)
+    snddev_patch_table *patchTable = this->patchTable;
+    snddev_irq0_struct *irq0struct = this->irq0struct;
 
     // get old ISRs
     oldIrq0RealMode = dpmi_getrmvect_ex(0x8);
@@ -245,8 +249,8 @@ bool sndNonDmaBase::setupIrq0() {
     logdebug("sample rate = %d, IRQ0 divisor = %d\n", sampleRate, timerDivisor);
 #endif
     outp(0x43, 0x34);       // ch0, mode2, lsb+msb
-    outp(0x40, (timerDivisor     ) & 0xFF);
-    outp(0x40, (timerDivisor >> 8) & 0xFF);
+    outp(0x40, (timerDivisor     ));
+    outp(0x40, (timerDivisor >> 8));
 
     _enable();
 
@@ -359,6 +363,9 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     // allocate DMA buffer
     if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
+    // help watcom to allocate registers :)
+    snddev_irq0_struct *irq0struct = this->irq0struct;
+
     // set callback variables
     irq0struct->bufferseg       = (uint16_t)(((uint32_t)dmaBlock.ptr & 0xF0000) >> 4);
     irq0struct->bufferofs       = (uint8_t*)dmaBlock.ptr;
@@ -441,14 +448,18 @@ uint32_t sndNonDmaBase::pause()
     return SND_ERR_OK;
 }
 
-uint32_t sndNonDmaBase::start() {
-    if (isPaused) {
-        // resume playback
-        setupIrq0();
+uint32_t sndNonDmaBase::resume()
+{
+    // resume playback
+    setupIrq0();
 
-        isPaused = false;
-        return SND_ERR_OK;
-    };
+    isPaused = false;
+    return SND_ERR_OK;
+}
+
+
+uint32_t sndNonDmaBase::start() {
+    if (isPaused) return resume();
 
     // stop if playing
     if (isPlaying) stop();
@@ -476,12 +487,16 @@ uint32_t sndNonDmaBase::start() {
 #endif
     }
 
+    // reset vars
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+
+    // ------------------------------------
+    // device-specific code
+
+    // set patching variables
     uint32_t chain_acc = (timerDivisor << 16);
     *((uint32_t*)(((uint8_t*)patchTable->rm_patch_dt - patchTable->rm_start) + (uint8_t*)realModeISREntry)) = chain_acc;
     *patchTable->pm_patch_dt = chain_acc;
-
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
 
     // install IRQ0 and start playback
     if (initPort() == false) {
@@ -494,6 +509,8 @@ uint32_t sndNonDmaBase::start() {
 #ifdef DEBUG_LOG
     printf("playback started\n");
 #endif
+
+    // ------------------------------------
 
     // done! we're playing sound :)
     isPaused = false; isPlaying = true;
@@ -550,7 +567,6 @@ uint32_t sndNonDmaBase::done() {
 
     return SND_ERR_OK;
 }
-
 
 // --------------------------------------
 // (the almighty) PC Honker driver

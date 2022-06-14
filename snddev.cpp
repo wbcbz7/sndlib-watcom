@@ -36,6 +36,38 @@ uint32_t sndlibDone() {
     return SND_ERR_OK;   
 }
 
+// ---------------- device info methods -------------------
+void SoundDevice::deviceInfo::clear() {
+    memset(privateBuf, sizeof(privateBuf), 0);
+    name = version = NULL; caps = NULL;
+    iobase = iobase2 = irq = irq2 = dma = dma2 = pci.addr = -1;
+    maxBufferSize = flags = capsLen = 0;
+}
+
+// fix private buffer pointers
+void SoundDevice::deviceInfo::privFixup(const SoundDevice::deviceInfo& rhs) {
+    if ((name >= rhs.privateBuf) && (name < rhs.privateBuf + sizeof(privateBuf))) 
+        name += (privateBuf - rhs.privateBuf);
+    if ((version >= rhs.privateBuf) && (version < rhs.privateBuf + sizeof(privateBuf))) 
+        version += (privateBuf - rhs.privateBuf);
+    if (((const char*)caps >= rhs.privateBuf) && ((const char*)caps < rhs.privateBuf + sizeof(privateBuf))) 
+        caps = (const soundFormatCapability*)((const char*)caps + (privateBuf - rhs.privateBuf));
+}
+
+// copy constructor
+SoundDevice::deviceInfo::deviceInfo(const SoundDevice::deviceInfo& rhs) {
+    memcpy(this, &rhs, sizeof(deviceInfo));
+    privFixup(rhs);
+}
+
+SoundDevice::deviceInfo SoundDevice::deviceInfo::operator=(const SoundDevice::deviceInfo& rhs) {
+    memcpy(this, &rhs, sizeof(deviceInfo));
+    privFixup(rhs);
+    return *this;
+}
+
+// -------------------------------------------------------
+
 const char * SoundDevice::getName()
 {
     return name;
@@ -98,6 +130,11 @@ uint32_t SoundDevice::open(uint32_t sampleRate, soundFormat fmt, uint32_t buffer
 }
 
 uint32_t SoundDevice::start()
+{
+    return SND_ERR_UNSUPPORTED;
+}
+
+uint32_t SoundDevice::resume()
 {
     return SND_ERR_UNSUPPORTED;
 }
@@ -391,6 +428,8 @@ uint64_t IsaDmaDevice::getPos() {
     }
     else return 0;
 }
+
+
 
 // IRQ procedures
 
