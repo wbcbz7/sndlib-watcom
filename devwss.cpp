@@ -742,12 +742,11 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     // install IRQ handler
     if (irq.hooked == false) {
         irq.flags = 0;
-        //irq.handler = snd_irqProcTable[devinfo.irq];
-        irq.handler = snd_irqStaticProc;
+        irq.handler = snd_irqProcTable[devinfo.irq];
         if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
 
         // set current active device
-        snd_activeDevice[0] = this;
+        snd_activeDevice[devinfo.irq] = this;
 
         inIrq = false;
     }

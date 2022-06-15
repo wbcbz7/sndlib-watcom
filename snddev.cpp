@@ -319,6 +319,14 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
     return SND_ERR_UNKNOWN_FORMAT;
 }
 
+uint32_t DmaBufferDevice::installIrq() {
+    return SND_ERR_UNSUPPORTED;
+}
+
+uint32_t DmaBufferDevice::removeIrq() {
+    return SND_ERR_UNSUPPORTED;
+}
+
 // -----------------------------------------------
 // DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
 // -----------------------------------------------
@@ -437,11 +445,11 @@ bool SoundDevice::irqProc() {
     return true;
 }
 
-
+extern "C" void __interrupt __far snd_irqStaticProc(INTPACK r);
 void __interrupt __far snd_irqStaticProc(INTPACK r) {   
-    if (snd_activeDevice[0]->irqProc() == false) 
-        return;
-    else _chain_intr(snd_activeDevice[0]->irq.oldhandler);
+    SoundDevice *dev = snd_activeDevice[r.h.al];
+    if (dev->irqProc() == false) return; 
+    else _chain_intr(dev->irq.oldhandler);
 }
 
 // active device storage
@@ -452,12 +460,12 @@ volatile IrqDetectInfo snd_IrqDetectInfo;
 
 #ifdef SNDDEV_IRQ_PER_DEVICE
 
-#define EXTERN_IRQPROC(n) extern "C" void cdecl snd_irqDispatch_##n()
+#define EXTERN_IRQPROC(n) extern "C" void __interrupt __far snd_irqDispatch_##n()
 #define IRQPROC(n) snd_irqDispatch_##n
 
-EXTERN_IRQPROC(0);
-EXTERN_IRQPROC(1);
-EXTERN_IRQPROC(2);
+//EXTERN_IRQPROC(0);
+//EXTERN_IRQPROC(1);
+//EXTERN_IRQPROC(2);
 EXTERN_IRQPROC(3);
 EXTERN_IRQPROC(4);
 EXTERN_IRQPROC(5);
@@ -472,11 +480,20 @@ EXTERN_IRQPROC(13);
 EXTERN_IRQPROC(14);
 EXTERN_IRQPROC(15);
 
+#if 0
 void __interrupt __far (*snd_irqProcTable[16])() = {
     IRQPROC(0),  IRQPROC(1),  IRQPROC(2),  IRQPROC(3),
     IRQPROC(4),  IRQPROC(5),  IRQPROC(6),  IRQPROC(7),
     IRQPROC(8),  IRQPROC(9),  IRQPROC(10), IRQPROC(11),
     IRQPROC(12), IRQPROC(13), IRQPROC(14), IRQPROC(15)
 };
+#else
+void __interrupt __far (*snd_irqProcTable[16])() = {
+    NULL,        NULL,        NULL,        IRQPROC(3),
+    IRQPROC(4),  IRQPROC(5),  IRQPROC(6),  IRQPROC(7),
+    IRQPROC(8),  IRQPROC(9),  IRQPROC(10), IRQPROC(11),
+    IRQPROC(12), IRQPROC(13), IRQPROC(14), IRQPROC(15)
+};
+#endif
 
 #endif

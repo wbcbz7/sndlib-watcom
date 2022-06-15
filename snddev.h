@@ -9,6 +9,8 @@
 #include "irq.h"
 #include "dma.h"
 
+#define SNDDEV_IRQ_PER_DEVICE
+
 // init sound library (called before any device using)
 uint32_t sndlibInit();
 
@@ -269,7 +271,7 @@ extern SoundDevice              *snd_activeDevice[16];
 #ifdef SNDDEV_IRQ_PER_DEVICE
 extern void __interrupt __far  (*snd_irqProcTable[16])();
 #endif
-void __interrupt __far snd_irqStaticProc();
+extern "C" void __interrupt __far snd_irqStaticProc(INTPACK r);
 
 // device IRQ detection stuff
 struct IrqDetectInfo {

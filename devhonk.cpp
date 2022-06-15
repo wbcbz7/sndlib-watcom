@@ -104,10 +104,6 @@ uint32_t honkGetDivisor(uint32_t rate) {
 bool sndNonDmaBase::initIrq0() {
     if (isIrq0Initialised) return true;
 
-    // help watcom to allocate registers :)
-    snddev_patch_table *patchTable = this->patchTable;
-    snddev_irq0_struct *irq0struct = this->irq0struct;
-
     // get old ISRs
     oldIrq0RealMode = dpmi_getrmvect_ex(0x8);
     oldIrq0ProtectedMode = (void __interrupt (__far*)())dpmi_getpmvect(0x8);
@@ -127,6 +123,10 @@ bool sndNonDmaBase::initIrq0() {
 #ifdef DEBUG_LOG
         logdebug("IRQ0 struct linear address: 0x%08X\n", irq0struct);
 #endif
+
+    // help watcom to allocate registers :)
+    snddev_patch_table *patchTable = this->patchTable;
+    snddev_irq0_struct *irq0struct = this->irq0struct;
 
     // allocate memory for rm code
     dpmi_getdosmem(((patchTable->rm_end - patchTable->rm_start) + 15) >> 4, &realModeISRBlock);

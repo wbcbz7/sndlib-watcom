@@ -513,17 +513,18 @@ _snddev_irq0_callback_dataofs   equ $-4
 extern snd_irqStaticProc_
 
 %macro IRQ_DISPATCH_ENTRY 1
-global _snd_irqDispatch_%1
-_snd_irqDispatch_%1:
+global snd_irqDispatch_%1_
+snd_irqDispatch_%1_:
         push        eax
         mov         al, (%1 & 255)
         pushf
+        push        cs
         call        snd_irqStaticProc_
         pop         eax
         iret
 %endmacro
-%assign intnum 0
-%rep 16
+%assign intnum 3
+%rep 16-intnum
         IRQ_DISPATCH_ENTRY intnum
         %assign intnum intnum+1
 %endrep

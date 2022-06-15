@@ -651,13 +651,12 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     // install IRQ handler
     if (irq.hooked == false) {
         irq.flags = 0;
-        //irq.handler = snd_irqProcTable[devinfo.irq];
-        irq.handler = snd_irqStaticProc;
+        irq.handler = snd_irqProcTable[devinfo.irq];
         if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
-        
+
         // set current active device
-        snd_activeDevice[0] = this;
-        
+        snd_activeDevice[devinfo.irq] = this;
+
         inIrq = false;
     }
     else return SND_ERR_STUCK_IRQ;
@@ -931,12 +930,11 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     // install IRQ handler
     if (irq.hooked == false) {
         irq.flags = 0;
-        //irq.handler = snd_irqProcTable[devinfo.irq];
-        irq.handler = snd_irqStaticProc;
+        irq.handler = snd_irqProcTable[devinfo.irq];
         if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
 
         // set current active device
-        snd_activeDevice[0] = this;
+        snd_activeDevice[devinfo.irq] = this;
 
         inIrq = false;
     }
@@ -1260,12 +1258,11 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     // install IRQ handler
     if (irq.hooked == false) {
         irq.flags = 0;
-        //irq.handler = snd_irqProcTable[devinfo.irq];
-        irq.handler = snd_irqStaticProc;
+        irq.handler = snd_irqProcTable[devinfo.irq];
         if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
 
         // set current active device
-        snd_activeDevice[0] = this;
+        snd_activeDevice[devinfo.irq] = this;
 
         inIrq = false;
     }
