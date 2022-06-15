@@ -506,6 +506,28 @@ _snddev_irq0_callback_dataofs   equ $-4
             ; phew :)
             iret
 
+
+; ---------------------------------------------------
+; IRQ dispatch table
+
+extern snd_irqStaticProc_
+
+%macro IRQ_DISPATCH_ENTRY 1
+global _snd_irqDispatch_%1
+_snd_irqDispatch_%1:
+        push        eax
+        mov         al, (%1 & 255)
+        pushf
+        call        snd_irqStaticProc_
+        pop         eax
+        iret
+%endmacro
+%assign intnum 0
+%rep 16
+        IRQ_DISPATCH_ENTRY intnum
+        %assign intnum intnum+1
+%endrep
+
 ; -----------------------------------
 ; END OF PROTECTED MODE CODE
 global _snddev_pm_lock_end
@@ -647,3 +669,4 @@ _snddev_irq0_patch_stereo1_fast:
         at snddev_patch_table.pm_patch_dataofs,   dd  _snddev_stereo1_fast_irq0_proc_pm.data_ofs
         at snddev_patch_table.pm_patch_dt,        dd  _snddev_stereo1_fast_irq0_proc_pm.dt
     iend
+

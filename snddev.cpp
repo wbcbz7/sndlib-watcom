@@ -438,7 +438,7 @@ bool SoundDevice::irqProc() {
 }
 
 
-void __interrupt __far snd_irqStaticProc() {   
+void __interrupt __far snd_irqStaticProc(INTPACK r) {   
     if (snd_activeDevice[0]->irqProc() == false) 
         return;
     else _chain_intr(snd_activeDevice[0]->irq.oldhandler);
@@ -452,37 +452,25 @@ volatile IrqDetectInfo snd_IrqDetectInfo;
 
 #ifdef SNDDEV_IRQ_PER_DEVICE
 
-#define MAKE_IRQPROC(num)                                               \
-void __interrupt __far snd_irqStaticProc##num () {                      \
-    if (snd_activeDevice[##num] == NULL) {                             \
-        return;                                                         \
-    }                                                                   \
-    if (!snd_activeDevice[##num]->inIrq) {                             \
-        snd_activeDevice[##num]->inIrq = true;                         \
-        bool rtn = snd_activeDevice[##num]->irqProc();                 \
-        snd_activeDevice[##num]->inIrq = false;                        \
-        if (rtn) _chain_intr(snd_activeDevice[##num]->irq.oldhandler); \
-    } else _chain_intr(snd_activeDevice[##num]->irq.oldhandler);       \
-};                                                                      \
+#define EXTERN_IRQPROC(n) extern "C" void cdecl snd_irqDispatch_##n()
+#define IRQPROC(n) snd_irqDispatch_##n
 
-MAKE_IRQPROC(0);
-MAKE_IRQPROC(1);
-MAKE_IRQPROC(2);
-MAKE_IRQPROC(3);
-MAKE_IRQPROC(4);
-MAKE_IRQPROC(5);
-MAKE_IRQPROC(6);
-MAKE_IRQPROC(7);
-MAKE_IRQPROC(8);
-MAKE_IRQPROC(9);
-MAKE_IRQPROC(10);
-MAKE_IRQPROC(11);
-MAKE_IRQPROC(12);
-MAKE_IRQPROC(13);
-MAKE_IRQPROC(14);
-MAKE_IRQPROC(15);
-
-#define IRQPROC(n) snd_irqStaticProc##n
+EXTERN_IRQPROC(0);
+EXTERN_IRQPROC(1);
+EXTERN_IRQPROC(2);
+EXTERN_IRQPROC(3);
+EXTERN_IRQPROC(4);
+EXTERN_IRQPROC(5);
+EXTERN_IRQPROC(6);
+EXTERN_IRQPROC(7);
+EXTERN_IRQPROC(8);
+EXTERN_IRQPROC(9);
+EXTERN_IRQPROC(10);
+EXTERN_IRQPROC(11);
+EXTERN_IRQPROC(12);
+EXTERN_IRQPROC(13);
+EXTERN_IRQPROC(14);
+EXTERN_IRQPROC(15);
 
 void __interrupt __far (*snd_irqProcTable[16])() = {
     IRQPROC(0),  IRQPROC(1),  IRQPROC(2),  IRQPROC(3),

@@ -142,7 +142,6 @@ void sbDspWrite(uint32_t base, uint8_t data) {
     printf("dsp write = %02X%s\n", data, (timeout == 0 ? " (timeout!)" : ""));
 #endif
 }
-#pragma aux sbDspWrite parm [edx] [eax]
 
 uint32_t sbDspRead(uint32_t base) {
     int timeout = (1ULL << 10); while (((inp(base + 0xE) & 0x80) == 0) && (--timeout != 0));
@@ -153,7 +152,6 @@ uint32_t sbDspRead(uint32_t base) {
 #endif
     return data;
 }
-#pragma aux sbDspRead parm [edx] value [eax]
 
 void essRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
     sbDspWrite(base, reg); sbDspWrite(base, data);
@@ -683,31 +681,33 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     return SND_ERR_OK;
 }
 
-uint32_t sndSoundBlaster2Pro::start() {
-    if (isPaused) {
-        // resume playback
-        
-        // enable speaker
-        sbDspWrite(devinfo.iobase, 0xD1);
-        
-        // resume DMA
-        // select normal or hispeed mode
-        if (isHighspeed) {
-            // idk
-            sbDspWrite(devinfo.iobase, 0x90);       // UNRELIABLE
-        } else {
-            sbDspWrite(devinfo.iobase, 0xD4);
-        }
+uint32_t sndSoundBlaster2Pro::resume() {
+    // resume playback
 
-        isPaused = false;
-        return SND_ERR_OK;
-    };
+    // enable speaker
+    sbDspWrite(devinfo.iobase, 0xD1);
+
+    // resume DMA
+    // select normal or hispeed mode
+    if (isHighspeed) {
+        // idk
+        sbDspWrite(devinfo.iobase, 0x90);       // UNRELIABLE
+    } else {
+        sbDspWrite(devinfo.iobase, 0xD4);
+    }
+
+    isPaused = false;
+    return SND_ERR_OK;
+}
+
+uint32_t sndSoundBlaster2Pro::start() {
+    if (isPaused) return resume();
     
     // stop if playing
     if (isPlaying) stop();
     
     isPaused = true;
-    
+
     // call callback to fill buffer with sound data
     {
         if (callback == NULL) return SND_ERR_NULLPTR;
@@ -731,6 +731,9 @@ uint32_t sndSoundBlaster2Pro::start() {
     // reset vars
     currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
     
+    // ------------------------------------
+    // device-specific code
+
     // acknowledge stuck IRQs
     sbAck8Bit(devinfo.iobase);
     
@@ -776,6 +779,8 @@ uint32_t sndSoundBlaster2Pro::start() {
 #ifdef DEBUG_LOG
     printf("playback started\n");
 #endif
+
+    // ------------------------------------
 
     // done! we're playing sound :)
     isPaused = false; isPlaying = true;
@@ -956,14 +961,16 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     return SND_ERR_OK;
 }
 
-uint32_t sndSoundBlaster16::start() {
-    if (isPaused) {
-        // resume playback
-        sbDspWrite(devinfo.iobase, (is16Bit ? 0xD6 : 0xD4));
+uint32_t sndSoundBlaster16::resume() {
+    // resume playback
+    sbDspWrite(devinfo.iobase, (is16Bit ? 0xD6 : 0xD4));
 
-        isPaused = false;
-        return SND_ERR_OK;
-    };
+    isPaused = false;
+    return SND_ERR_OK;
+} 
+
+uint32_t sndSoundBlaster16::start() {
+    if (isPaused) return resume();
 
     // stop if playing
     if (isPlaying) stop();
@@ -992,6 +999,9 @@ uint32_t sndSoundBlaster16::start() {
 
     // reset vars
     currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+
+    // ------------------------------------
+    // device-specific code
 
     // reset DSP
     if (sbDspReset(devinfo.iobase) == false) return SND_ERR_INVALIDCONFIG;
@@ -1026,6 +1036,8 @@ uint32_t sndSoundBlaster16::start() {
 #ifdef DEBUG_LOG
     printf("playback started\n");
 #endif
+
+    // ------------------------------------
 
     // done! we're playing sound :)
     isPaused = false; isPlaying = true;
@@ -1112,11 +1124,6 @@ uint32_t sndSoundBlaster16::getStartCommand(soundFormatConverterInfo & conv)
 
     return (uint16_t)((mode << 8) | cmd);
 }
-
-
-// TODO: ESS AudioDrive support
-
-#if 1
 
 uint32_t sndESSAudioDrive::fillDspInfo(SoundDevice::deviceInfo* info, uint32_t sbDspVersion) {
     // fill info
@@ -1283,14 +1290,16 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     return SND_ERR_OK;
 }
 
-uint32_t sndESSAudioDrive::start() {
-    if (isPaused) {
-        // resume playback
-        essRegWrite(devinfo.iobase, 0xB8, (essRegRead(devinfo.iobase, 0xB8) & ~0x1) | 0x1);
+uint32_t sndESSAudioDrive::resume() {
+    // resume playback
+    essRegWrite(devinfo.iobase, 0xB8, (essRegRead(devinfo.iobase, 0xB8) & ~0x1) | 0x1);
 
-        isPaused = false;
-        return SND_ERR_OK;
-    };
+    isPaused = false;
+    return SND_ERR_OK;
+}
+
+uint32_t sndESSAudioDrive::start() {
+    if (isPaused) return resume();
 
     // stop if playing
     if (isPlaying) stop();
@@ -1319,6 +1328,9 @@ uint32_t sndESSAudioDrive::start() {
 
     // reset vars
     currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+
+    // ------------------------------------
+    // device-specific code
 
     // acknowledge stuck IRQs
     sbAck8Bit(devinfo.iobase);
@@ -1420,6 +1432,8 @@ uint32_t sndESSAudioDrive::start() {
     printf("playback started\n");
 #endif
 
+    // ------------------------------------
+
     // done! we're playing sound :)
     isPaused = false; isPlaying = true;
 
@@ -1496,4 +1510,3 @@ const char* sndESSAudioDrive::dspVerToString(SoundDevice::deviceInfo * info, uin
     return info->version;
 }
 
-#endif

@@ -89,27 +89,11 @@ const soundFormatCapability pas16Caps[] = {
 // ---------------------------------------------
 // PAS helper routines 
 
-inline void pasRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
+inline void pasRegWrite(uint32_t base, uint32_t reg, uint8_t data) {
     outp(base + reg, data);
 #ifdef DEBUG_LOG
     logdebug("pas write Rx%02X = %02X\n", base + reg, data);
 #endif
-}
-
-// + update mvsound shadow regs struct
-void pasRegShadowWrite(uint32_t base, uint32_t reg, uint8_t data, MVSoundShadowRegisters *shadow) {
-    pasRegWrite(base, reg, data);
-    if (shadow != NULL) switch (reg) {
-        case PAS_REG_AUDIOMIXR:     shadow->_audiomixr = data; break;
-        case PAS_REG_AUDIOFILT:     shadow->_audiofilt = data; break;
-        case PAS_REG_INTRCTLRST:    shadow->_intrctlrst = data; break;
-        case PAS_REG_INTRCTLR:      shadow->_intrctlr = data; break;
-        case PAS_REG_CROSSCHANNEL:  shadow->_crosschannel = data; break;
-        case PAS_REG_SAMPLERATE:    shadow->_samplerate = data; break;
-        case PAS_REG_SAMPLECNT:     shadow->_samplecnt = data; break;
-        case PAS_REG_TMRCTLR:       shadow->_tmrctlr = data; break;
-        default:                    break;
-    };
 }
 
 inline uint8_t pasRegRead(uint32_t base, uint32_t reg) {
@@ -120,13 +104,16 @@ inline uint8_t pasRegRead(uint32_t base, uint32_t reg) {
     return data;
 }
 
-inline uint32_t pasGetDivisor(uint32_t rate) {
+// round(a / b)
+uint32_t udivRound(uint32_t a, uint32_t b);
+#pragma aux udivRound = \
+        "xor edx, edx"  "div ebx"       "shr ebx, 1" \
+        "cmp edx, ebx"  "jb  _skip_inc" "inc eax" \
+        "_skip_inc:" parm [eax] [ebx] value [eax] modify [eax ebx edx]
+
+uint32_t pasGetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
-    int tc = (0x1234DD / rate);
-    
-    // check which time constant is more accurate
-    if (abs(rate - (0x1234DD / tc)) > abs(rate - (0x1234DD / (tc + 1)))) tc++;
-    return tc;
+    return udivRound(0x1234DD, rate);
 }
 
 uint16_t isMvSoundInstalled();
@@ -436,14 +423,16 @@ uint32_t sndProAudioSpectrum::done() {
     return SND_ERR_OK;
 }
 
-uint32_t sndProAudioSpectrum::start() {
-    if (isPaused) {
-        // resume playback
-        pasRegWrite(devinfo.iobase, PAS_REG_AUDIOFILT, shadowPtr->_audiofilt |= 0xC0);
+uint32_t sndProAudioSpectrum::resume() {
+    // resume playback
+    pasRegWrite(devinfo.iobase, PAS_REG_AUDIOFILT, shadowPtr->_audiofilt |= 0xC0);
 
-        isPaused = false;
-        return SND_ERR_OK;
-    };
+    isPaused = false;
+    return SND_ERR_OK;
+};
+
+uint32_t sndProAudioSpectrum::start() {
+    if (isPaused) return resume();
 
     // stop if playing
     if (isPlaying) stop();
@@ -473,6 +462,9 @@ uint32_t sndProAudioSpectrum::start() {
 
     // reset vars
     currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+
+    // ------------------------------------
+    // device-specific code
 
     // check if 16 bit transfer
     dmaChannel = devinfo.dma;
@@ -517,7 +509,8 @@ uint32_t sndProAudioSpectrum::start() {
 #endif
 
     uint32_t dmaBufferSamples = (dmaBufferSize / convinfo.bytesPerSample);  // testme
-    if (dmaChannel >= 4) dmaBufferSamples >>= 1;
+    if (convinfo.format & SND_FMT_STEREO)   dmaBufferSamples <<= 1;
+    if (dmaChannel >= 4)                    dmaBufferSamples >>= 1;
     
     // start playback
     // load block length

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
+#include <i86.h>
 
 #include "convert.h"
 #include "sndmisc.h"
@@ -84,6 +85,9 @@ extern _dpmi_rmregs         snddev_irq0_callback_registers;                 // c
 extern uint8_t*             snddev_rm_lock_start, snddev_rm_lock_end;       // start/end of locked range
 }
 
+uint32_t _DS();
+#pragma aux _DS = "mov eax, ds" value [eax];
+
 // round(a / b)
 uint32_t udivRound(uint32_t a, uint32_t b);
 #pragma aux udivRound = \
@@ -145,11 +149,7 @@ bool sndNonDmaBase::initIrq0() {
     memcpy(realModeISREntry, patchTable->rm_start, (patchTable->rm_end - patchTable->rm_start));
     
     // patch pm code
-    uint32_t tmp;
-    _asm push ds;
-    _asm pop  dword ptr [tmp];
-
-    *patchTable->pm_patch_dataseg  = tmp;
+    *patchTable->pm_patch_dataseg  = _DS();
     *patchTable->pm_patch_dataofs  = irq0struct;
     *patchTable->pm_patch_dt       = 0;
 

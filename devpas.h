@@ -142,6 +142,9 @@ public:
     // pause playback (start() for resume)
     virtual uint32_t pause();
     
+    // resume playback
+    virtual uint32_t resume();
+
     // get playback position in samples
     //virtual uint64_t getPos();
 
@@ -156,24 +159,18 @@ public:
 
 protected:
 
-    // is device detected?
-    bool            isDetected;
-    bool            isInitialised;
-    bool            isPlaying;
-    bool            isPaused;
-
     // detection flags
-    uint32_t        featureLevel;
-    bool            isMvSoundPresent;
+    uint32_t            featureLevel;
+    bool                isMvSoundPresent;
 
     // detect PAS presence, fill deviceInfo, returns 1 if success
-    bool            pasDetect(SoundDevice::deviceInfo* info, bool manualDetect = false);
+    bool                pasDetect(SoundDevice::deviceInfo* info, bool manualDetect = false);
 
     // reset codec
-    virtual bool     pasReset(SoundDevice::deviceInfo* info);
+    virtual bool        pasReset(SoundDevice::deviceInfo* info);
     
     // fill info according to DSP version
-    virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
+    virtual uint32_t    fillCodecInfo(SoundDevice::deviceInfo* info);
 
     // --------------------------- IRQ stuff --------------------
 

@@ -237,6 +237,12 @@ protected:
     // free DMA buffer
     virtual uint32_t    dmaBufferFree();
 
+    // install IRQ routine
+    virtual uint32_t    installIrq();
+
+    // remove IRQ routine
+    virtual uint32_t    removeIrq();
+
     // advance play/render pointers
     virtual void        irqAdvancePos();
 

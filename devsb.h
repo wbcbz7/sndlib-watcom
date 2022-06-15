@@ -62,11 +62,11 @@ public:
     
     // pause playback (start() for resume)
     virtual uint32_t pause();
+    */
 
     // resume playback
-    
+    //virtual uint32_t resume();
 
-    */
     // get playback position in samples
     //virtual uint64_t getPos();
     
@@ -108,6 +108,7 @@ protected:
     
     // used during IRQ discovery only
     static void __interrupt sbDetectIrqProc();
+
 };
 
 // SB 2.0/Pro driver
@@ -145,6 +146,9 @@ public:
     // pause playback (start() for resume)
     virtual uint32_t pause();
     
+    // resume playback
+    virtual uint32_t resume();
+
     // get playback position in samples
     //virtual uint64_t getPos();
     
@@ -207,6 +211,9 @@ public:
     // pause playback (start() for resume)
     virtual uint32_t pause();
     
+    // resume playback
+    virtual uint32_t resume();
+
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
     
@@ -279,6 +286,9 @@ public:
 
     // pause playback (start() for resume)
     virtual uint32_t pause();
+
+    // resume playback
+    virtual uint32_t resume();
 
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void* data, uint32_t len);
