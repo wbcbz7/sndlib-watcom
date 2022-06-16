@@ -14,7 +14,7 @@
 
 #define arrayof(x) (sizeof(x) / sizeof(x[0]))
 
-const uint32_t probeDataLength = 128;
+const uint32_t probeDataLength = 64;
 
 const uint32_t sbIoBase[]  = { 0x220, 0x240, 0x260, 0x280 };
 const uint32_t sbIrq[]     = { 3, 4, 5, 7, 9, 10, 11, 12 };
@@ -142,6 +142,7 @@ void sbDspWrite(uint32_t base, uint8_t data) {
     printf("dsp write = %02X%s\n", data, (timeout == 0 ? " (timeout!)" : ""));
 #endif
 }
+#pragma aux sbDspWrite parm routine []
 
 uint32_t sbDspRead(uint32_t base) {
     int timeout = (1ULL << 10); while (((inp(base + 0xE) & 0x80) == 0) && (--timeout != 0));
@@ -152,6 +153,7 @@ uint32_t sbDspRead(uint32_t base) {
 #endif
     return data;
 }
+#pragma aux sbDspRead parm routine [] value [eax]
 
 void essRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
     sbDspWrite(base, reg); sbDspWrite(base, data);
@@ -159,6 +161,7 @@ void essRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
     printf("ess write Rx%02X = %02X\n", reg, data);
 #endif
 }
+#pragma aux essRegWrite parm routine []
 
 uint32_t essRegRead(uint32_t base, uint8_t reg) {
     sbDspWrite(base, 0xC0); sbDspWrite(base, reg); uint32_t data = sbDspRead(base);
@@ -167,6 +170,7 @@ uint32_t essRegRead(uint32_t base, uint8_t reg) {
 #endif
     return data;
 }
+#pragma aux essRegRead parm routine [] value [eax]
 
 void sbMixerWrite(uint32_t base, uint8_t index, uint8_t data) {
     outp(base + 4, index); outp(base + 5, data);
@@ -252,7 +256,7 @@ uint32_t sndSBBase::sbDetect(SoundDevice::deviceInfo *info, bool manualDetect) {
 #ifdef DEBUG_LOG
     fprintf(stderr, __func__": start detect...\n");
 #endif
-
+    char envstr[64] = { 0 };
     if (info == NULL) return 0;
     
     // query BLASTER variable
@@ -264,7 +268,6 @@ uint32_t sndSBBase::sbDetect(SoundDevice::deviceInfo *info, bool manualDetect) {
 #endif
 
         // copy variable to temporary buffer
-        char envstr[256] = { 0 };
         strncpy(envstr, blasterEnv, sizeof(envstr));
 
         // tokenize
@@ -648,18 +651,8 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     // allocate DMA buffer
     if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
     
-    // install IRQ handler
-    if (irq.hooked == false) {
-        irq.flags = 0;
-        irq.handler = snd_irqProcTable[devinfo.irq];
-        if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
-
-        // set current active device
-        snd_activeDevice[devinfo.irq] = this;
-
-        inIrq = false;
-    }
-    else return SND_ERR_STUCK_IRQ;
+    // allocate DMA buffer
+    if (result = installIrq() != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -696,39 +689,12 @@ uint32_t sndSoundBlaster2Pro::resume() {
     }
 
     isPaused = false;
-    return SND_ERR_OK;
+    return SND_ERR_RESUMED;
 }
 
 uint32_t sndSoundBlaster2Pro::start() {
-    if (isPaused) return resume();
-    
-    // stop if playing
-    if (isPlaying) stop();
-    
-    isPaused = true;
-
-    // call callback to fill buffer with sound data
-    {
-        if (callback == NULL) return SND_ERR_NULLPTR;
-#ifdef DEBUG_LOG
-        printf("prefill...\n");
-#endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
-        switch (rtn) {
-            case callbackOk         : break;
-            case callbackSkip       : 
-            case callbackComplete   : 
-            case callbackAbort      : 
-            default : return SND_ERR_NO_DATA;
-        }
-        renderPos += dmaBufferSamples;
-#ifdef DEBUG_LOG
-        printf("done\n");
-#endif
-    }
-    
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+    uint32_t rtn = SND_ERR_OK;
+    if (rtn = prefill() != SND_ERR_OK) return rtn;
     
     // ------------------------------------
     // device-specific code
@@ -927,18 +893,8 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     // allocate DMA buffer
     if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
-    // install IRQ handler
-    if (irq.hooked == false) {
-        irq.flags = 0;
-        irq.handler = snd_irqProcTable[devinfo.irq];
-        if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
-
-        // set current active device
-        snd_activeDevice[devinfo.irq] = this;
-
-        inIrq = false;
-    }
-    else return SND_ERR_STUCK_IRQ;
+    // allocate DMA buffer
+    if (result = installIrq() != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -964,39 +920,12 @@ uint32_t sndSoundBlaster16::resume() {
     sbDspWrite(devinfo.iobase, (is16Bit ? 0xD6 : 0xD4));
 
     isPaused = false;
-    return SND_ERR_OK;
+    return SND_ERR_RESUMED;
 } 
 
 uint32_t sndSoundBlaster16::start() {
-    if (isPaused) return resume();
-
-    // stop if playing
-    if (isPlaying) stop();
-
-    isPaused = true;
-
-    // call callback to fill buffer with sound data
-   {
-        if (callback == NULL) return SND_ERR_NULLPTR;
-#ifdef DEBUG_LOG
-        printf("prefill...\n");
-#endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
-        switch (rtn) {
-            case callbackOk         : break;
-            case callbackSkip       : 
-            case callbackComplete   : 
-            case callbackAbort      : 
-            default : return SND_ERR_NO_DATA;
-        }
-        renderPos += dmaBufferSamples;
-#ifdef DEBUG_LOG
-        printf("done\n");
-#endif
-    }
-
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+    uint32_t rtn = SND_ERR_OK;
+    if (rtn = prefill() != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code
@@ -1256,17 +1185,7 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // install IRQ handler
-    if (irq.hooked == false) {
-        irq.flags = 0;
-        irq.handler = snd_irqProcTable[devinfo.irq];
-        if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
-
-        // set current active device
-        snd_activeDevice[devinfo.irq] = this;
-
-        inIrq = false;
-    }
-    else return SND_ERR_STUCK_IRQ;
+    if (result = installIrq() != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -1296,35 +1215,8 @@ uint32_t sndESSAudioDrive::resume() {
 }
 
 uint32_t sndESSAudioDrive::start() {
-    if (isPaused) return resume();
-
-    // stop if playing
-    if (isPlaying) stop();
-
-    isPaused = true;
-
-    // call callback to fill buffer with sound data
-    {
-        if (callback == NULL) return SND_ERR_NULLPTR;
-#ifdef DEBUG_LOG
-        printf("prefill...\n");
-#endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
-        switch (rtn) {
-            case callbackOk         : break;
-            case callbackSkip       : 
-            case callbackComplete   : 
-            case callbackAbort      : 
-            default : return SND_ERR_NO_DATA;
-        }
-        renderPos += dmaBufferSamples;
-#ifdef DEBUG_LOG
-        printf("done\n");
-#endif
-    }
-
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+    uint32_t rtn = SND_ERR_OK;
+    if (rtn = prefill() != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code

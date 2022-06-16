@@ -365,17 +365,7 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
     if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // install IRQ handler
-    if (irq.hooked == false) {
-        irq.flags = 0;
-        irq.handler = snd_irqProcTable[devinfo.irq];
-        if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
-
-        // set current active device
-        snd_activeDevice[devinfo.irq] = this;
-
-        inIrq = false;
-    }
-    else return SND_ERR_STUCK_IRQ;
+    if (result = installIrq() != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -427,40 +417,12 @@ uint32_t sndProAudioSpectrum::resume() {
     pasRegWrite(devinfo.iobase, PAS_REG_AUDIOFILT, shadowPtr->_audiofilt |= 0xC0);
 
     isPaused = false;
-    return SND_ERR_OK;
+    return SND_ERR_RESUMED;
 };
 
 uint32_t sndProAudioSpectrum::start() {
-    if (isPaused) return resume();
-
-    // stop if playing
-    if (isPlaying) stop();
-
-    isPaused = true;
-    if (!isInitialised) return SND_ERR_UNINITIALIZED;
-
-    // call callback to fill buffer with sound data
-    {
-        if (callback == NULL) return SND_ERR_NULLPTR;
-#ifdef DEBUG_LOG
-        printf("prefill...\n");
-#endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
-        switch (rtn) {
-            case callbackOk         : break;
-            case callbackSkip       : 
-            case callbackComplete   : 
-            case callbackAbort      : 
-            default : return SND_ERR_NO_DATA;
-        }
-        renderPos += dmaBufferSamples;
-#ifdef DEBUG_LOG
-        printf("done\n");
-#endif
-    }
-
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+    uint32_t rtn = SND_ERR_OK;
+    if (rtn = prefill() != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code

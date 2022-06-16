@@ -245,11 +245,15 @@ protected:
     // remove IRQ routine
     virtual uint32_t    removeIrq();
 
+    // init start and prefill buffer
+    virtual uint32_t    prefill();
+
     // advance play/render pointers
     virtual void        irqAdvancePos();
 
     // IRQ->callback caller
     virtual bool        irqCallbackCaller();
+
 };
 
 // ISA DMA device

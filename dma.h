@@ -1,6 +1,4 @@
 #pragma once
-#ifndef __DMA_H__
-#define __DMA_H__
 
 #include <stdlib.h>
 #include "dpmi.h"
@@ -60,6 +58,4 @@ bool dmaStop(size_t chan);
 
 // get current DMA transfer position
 unsigned long dmaGetPos(size_t chan, bool lockInts = true);
-
-#endif
 

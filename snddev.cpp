@@ -319,8 +319,55 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
     return SND_ERR_UNKNOWN_FORMAT;
 }
 
+uint32_t DmaBufferDevice::prefill() {
+    if (isPaused) { resume(); return SND_ERR_RESUMED; }
+
+    // stop if playing
+    if (isPlaying) stop();
+
+    isPaused = true;
+    if (!isInitialised) return SND_ERR_UNINITIALIZED;
+
+    // call callback to fill buffer with sound data
+    {
+        if (callback == NULL) return SND_ERR_NULLPTR;
+#ifdef DEBUG_LOG
+        printf("prefill...\n");
+#endif
+        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
+        switch (rtn) {
+            case callbackOk         : break;
+            case callbackSkip       : 
+            case callbackComplete   : 
+            case callbackAbort      : 
+            default : return SND_ERR_NO_DATA;
+        }
+        renderPos = dmaBufferSamples;
+#ifdef DEBUG_LOG
+        printf("done\n");
+#endif
+    }
+
+    // reset vars
+    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+
+    return SND_ERR_OK;
+}
+
 uint32_t DmaBufferDevice::installIrq() {
-    return SND_ERR_UNSUPPORTED;
+    // install IRQ handler
+    if (irq.hooked == false) {
+        irq.flags = 0;
+        irq.handler = snd_irqProcTable[devinfo.irq];
+        if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_INVALIDCONFIG;
+
+        // set current active device
+        snd_activeDevice[devinfo.irq] = this;
+
+        inIrq = false;
+        return SND_ERR_OK;
+    }
+    else return SND_ERR_STUCK_IRQ;
 }
 
 uint32_t DmaBufferDevice::removeIrq() {
@@ -360,17 +407,6 @@ bool DmaBufferDevice::irqCallbackCaller() {
         snddev_pm_old_stack = NULL;
         snddev_pm_stack_in_use--;
     }
-
-    // test return code
-#if 0
-    switch (rtn) {
-        case callbackOk: break;
-        case callbackSkip:
-        case callbackComplete:
-        case callbackAbort:
-        default: stop();                   // race condition?
-    }
-#endif
 
     return rtn == callbackOk;
 };
@@ -436,8 +472,6 @@ uint64_t IsaDmaDevice::getPos() {
     }
     else return 0;
 }
-
-
 
 // IRQ procedures
 

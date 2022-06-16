@@ -142,6 +142,9 @@ public:
 
     // pause playback (start() for resume)
     virtual uint32_t pause();
+
+    // resume playback
+    virtual uint32_t resume();
     
     // get playback position in samples
     //virtual uint64_t getPos();
@@ -156,12 +159,6 @@ public:
     virtual uint32_t done();
 
 protected:
-
-    // is device detected?
-    bool            isDetected;
-    bool            isInitialised;
-    bool            isPlaying;
-    bool            isPaused;
 
     // identification info
     uint32_t        featureLevel;               // detected feature level
@@ -192,6 +189,12 @@ protected:
 
     // get codec version
     virtual bool getCodecVersion(SoundDevice::deviceInfo* info);
+
+    // probe environment
+    bool    readEnvironment(SoundDevice::deviceInfo *info);
+
+    // kickstart WSS to enable probing
+    bool    kickstartProbingPlayback(SoundDevice::deviceInfo *info, uint32_t dmaChannel, ::dmaBlock &block, uint32_t probeLength, bool enableIrq);
 
     // --------------------------- IRQ stuff --------------------
 

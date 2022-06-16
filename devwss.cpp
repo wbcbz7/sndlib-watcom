@@ -16,8 +16,8 @@
 #define arrayof(x) (sizeof(x) / sizeof(x[0]))
 
 volatile static bool sndWindowsSoundSystem::irqFound = false;
-const size_t probeDataLength = 100;
-const size_t probeIrqLength = 16;
+const size_t probeDataLength = 64;
+const size_t probeIrqLength = 4;
 
 const uint32_t wssgusIoBase[] = { 0x220, 0x230, 0x240, 0x250, 0x260, 0x270, 0x280 };
 const uint32_t wssIoBase[]    = { 0x530, 0xE80, 0xF40, 0x680 };     // "standard" ports only
@@ -165,14 +165,30 @@ void csExtRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
 
 // ----------------------------------------------
 
-bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manualDetect)
-{
-#ifdef DEBUG_LOG
-    fprintf(stderr, __func__": start detect...\n");
-#endif
+bool sndWindowsSoundSystem::kickstartProbingPlayback(SoundDevice::deviceInfo *info, uint32_t dmaChannel, ::dmaBlock &block, uint32_t probeLength, bool enableIrq) {
+    // ack interrupt
+    if (inp(info->iobase + 2) & 1) outp(info->iobase + 2, 0);
 
-    if (info == NULL) return 0;
+    // do single cycle, 8 bit mono transfer at relatively low sample rate (8khz for example)
+    if (setFormat(info, 8000, SND_FMT_INT8 | SND_FMT_UNSIGNED | SND_FMT_MONO)) return 0;
+    dmaSetup(dmaChannel, &block, probeLength, dmaModeSingle | dmaModeRead | dmaModeAutoInit);
+    
+    // load block length
+    wssRegWrite(info->iobase, WSS_REG_DMA_COUNT_LOW,    probeLength & 0xFF);
+    wssRegWrite(info->iobase, WSS_REG_DMA_COUNT_HIGH,   probeLength >> 8);
+    
+    // disable/enable interrupts
+    wssRegWrite(info->iobase, WSS_REG_PIN_CTRL,        (wssRegRead(info->iobase, WSS_REG_PIN_CTRL)  & ~2) | (enableIrq ? 2 : 0));
+    
+    // enable playback
+    wssRegWrite(info->iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(info->iobase, WSS_REG_INTERFACE_CONFIG)  | 1);
+
+    return true;
+}
+
+bool sndWindowsSoundSystem::readEnvironment(SoundDevice::deviceInfo *info) {
     SoundDevice::deviceInfo gusinfo;
+    char envstr[32] = { 0 };
 
     // check for ULTRA16 variable
     // ULTRA16=iobase,dma,irq,1,0
@@ -184,7 +200,6 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 #endif
 
         // copy variable to temporary buffer
-        char envstr[256] = { 0 };
         strncpy(envstr, blasterEnv, sizeof(envstr));
 
         // tokenize
@@ -204,7 +219,6 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 #ifdef DEBUG_LOG
         logdebug("ULTRASND variable = %s\n", ultravar);
 #endif
-        char envstr[256] = { 0 };
         strncpy(envstr, ultravar, sizeof(envstr));
         char* p = strtok(envstr, ",");
         gusinfo.iobase = strtol(p, NULL, 16); p = strtok(NULL, ",");
@@ -229,6 +243,20 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
         }
     }
 
+    return true;
+}
+
+bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manualDetect)
+{
+#ifdef DEBUG_LOG
+    fprintf(stderr, __func__": start detect...\n");
+#endif
+
+    if (info == NULL) return 0;
+    
+    // first, try to check environment variables
+    readEnvironment(info);
+
     // check if we have enough info for init
     // if not, probe io ports for codec 
 
@@ -237,7 +265,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
         bool isFound = false;
         // probe WSS ports
         for (const uint32_t* port = wssIoBase; port < (wssIoBase + arrayof(wssIoBase)); port++) {
-            if ((((wssRegRead(*port + 0x4, WSS_REG_MODE_ID) & 0xF) < 0xF) && ((wssRegRead(*port + 0x4, WSS_REG_MODE_ID) & 0xF) != 0)) || ((inp(info->iobase + 3) & 0x3F) == 0x4)) {
+            if (((inp(info->iobase + 3) & 0x3F) == 0x4) || ((wssRegRead(*port + 0x4, WSS_REG_MODE_ID) & 0xF) == 0xA)) {
                 // found!
                 isFound = true; isGus = false;
                 info->iobase = *port + 0x4;     // fixup
@@ -246,7 +274,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
         }
         // ...then probe GUS ports if not found
         if (isFound == false) for (const uint32_t* port = wssgusIoBase; port < (wssgusIoBase + arrayof(wssgusIoBase)); port++) {
-            if ((((wssRegRead(*port + 0x10C, WSS_REG_MODE_ID) & 0xF) < 0xF) && ((wssRegRead(*port + 0x10C, WSS_REG_MODE_ID) & 0xF) != 0)) || ((inp(*port + 0x106) == 0xB))) {
+            if ((inp(*port + 0x106) == 0xB) || ((wssRegRead(*port + 0x106, WSS_REG_MODE_ID) & 0xF) == 0xA)) {
             // found!
             isFound = true; isGus = true;
             info->iobase = *port + 0x10C;     // fixup
@@ -274,39 +302,26 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
     // init rates list - use 48khz lmited for detect purpose
     fixedRatesList = (uint32_t*)wssRates;
 
-    // check if DMA channel has been found
-    if (info->dma == -1) if (manualDetect == false) return false; else {
-        // probe DMA
-        ::dmaBlock testblk;
-        if (dmaAlloc(probeDataLength, &testblk)) return false;
-        memset(testblk.ptr, 0x80, probeDataLength);
+    // probe DMA
+    ::dmaBlock testblk;
+    if (dmaAlloc(probeDataLength, &testblk)) return false;
+    memset(testblk.ptr, 0x80, probeDataLength);
 
+    // check if DMA channel has been found
+    if (info->dma == -1) if (manualDetect == false) { dmaFree(&testblk); return false; } else {
         for (const uint32_t* dma = wssDma; dma < (wssDma + arrayof(wssDma)); dma++) {
             
 #ifdef DEBUG_LOG
             logdebug("probe dma %d...\n", *dma);
 #endif
 
-            // ack interrupt
-            if (inp(info->iobase + 2) & 1) outp(info->iobase + 2, 0);
+            // start WSS playback
+            kickstartProbingPlayback(info, *dma, testblk, probeDataLength, false);
 
-            // do single cycle, 8 bit mono transfer at relatively low sample rate (8khz for example)
-            if (setFormat(info, 8000, SND_FMT_INT8 | SND_FMT_UNSIGNED | SND_FMT_MONO)) return 0;
-            dmaSetup(*dma, &testblk, probeDataLength, dmaModeSingle | dmaModeRead | dmaModeAutoInit);
-            
-            // load block length
-            wssRegWrite(info->iobase, WSS_REG_DMA_COUNT_LOW,  probeDataLength & 0xFF);
-            wssRegWrite(info->iobase, WSS_REG_DMA_COUNT_HIGH, probeDataLength >> 8);
-
-            // disable interrupts
-            wssRegWrite(info->iobase, WSS_REG_PIN_CTRL, wssRegRead(info->iobase, WSS_REG_PIN_CTRL) & ~2);
-
-            // enable playback
-            wssRegWrite(info->iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(info->iobase, WSS_REG_INTERFACE_CONFIG) | 1);
-
-            volatile uint32_t timeout = 0x4000;
+            // wait until DMA current length counter changes
+            uint32_t timeout = 0x1000;
             volatile uint32_t dmapos = dmaGetPos(*dma, false);
-            do {
+            while (--timeout) {
                 inp(0x80);
                 if (dmapos != dmaGetPos(*dma, false)) {
                     info->dma = *dma;
@@ -315,24 +330,22 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 #endif
                     break;
                 };
-            } while (--timeout);
+            };
 #ifdef DEBUG_LOG
             if (timeout == 0) logdebug("timeout!\n");
 #endif
 
             // stop playback
             wssRegWrite(info->iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(info->iobase, WSS_REG_INTERFACE_CONFIG) & ~1);
+            dmaStop(*dma);
 
             // ack interrupt
             if (inp(info->iobase + 2) & 1) outp(info->iobase + 2, 0);
-
-            dmaStop(*dma);
             
             if (info->dma != -1) break;
         }
-        dmaFree(&testblk);
     }
-    if (info->dma == -1) return 0;
+    if (info->dma == -1) { dmaFree(&testblk); return false; }
 
 
 #ifdef DEBUG_LOG
@@ -341,11 +354,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 
     // check if IRQ has been found
     if (info->irq == -1) if (manualDetect == false) return false; else {
-        // probe IRQ
-        ::dmaBlock testblk;
-        if (dmaAlloc(probeIrqLength, &testblk)) return false;
-        memset(testblk.ptr, 0x80, probeIrqLength);
-        
+        // probe IRQ      
         irqEntry irqstuff = { 0 };
         irqstuff.handler = &wssDetectIrqProc;
         snd_IrqDetectInfo.iobase = info->iobase;
@@ -367,22 +376,11 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
             // reset irq found flag
             snd_IrqDetectInfo.found = false;
 
-            // do single cycle, 8 bit mono transfer at relatively low sample rate (8khz for example)
-            if (setFormat(info, 8000, SND_FMT_INT8 | SND_FMT_UNSIGNED | SND_FMT_MONO)) return 0;
-            dmaSetup(info->dma, &testblk, probeIrqLength, dmaModeSingle | dmaModeRead | dmaModeAutoInit);
-            
-            // load block length
-            wssRegWrite(info->iobase, WSS_REG_DMA_COUNT_LOW,    probeIrqLength & 0xFF);
-            wssRegWrite(info->iobase, WSS_REG_DMA_COUNT_HIGH,   probeIrqLength >> 8);
-            
-            // ENABLE interrupts
-            wssRegWrite(info->iobase, WSS_REG_PIN_CTRL,         wssRegRead(info->iobase, WSS_REG_PIN_CTRL)          | 2);
-            
-            // enable playback
-            wssRegWrite(info->iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(info->iobase, WSS_REG_INTERFACE_CONFIG)  | 1);
+            // setup codec for playback
+            kickstartProbingPlayback(info, info->dma, testblk, probeIrqLength, false);
 
-            volatile uint32_t timeout = 0x4000;
-            do {
+            uint32_t timeout = 0x1000;
+            while (--timeout) {
                 inp(0x80);
 
                 if (snd_IrqDetectInfo.found) {
@@ -392,7 +390,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
                     info->irq = *irq;
                     break;
                 }
-            } while (--timeout);
+            };
 
             // stop playback
             wssRegWrite(info->iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(info->iobase, WSS_REG_INTERFACE_CONFIG) & ~1);         
@@ -403,8 +401,10 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
             // acknowledge interrupt if not found
             if (snd_IrqDetectInfo.found) break; else if (inp(info->iobase + 2) & 1) outp(info->iobase + 2, 0);   
         }
-        dmaFree(&testblk);
     }
+
+    // free DMA block
+    dmaFree(&testblk);
 
 #ifdef DEBUG_LOG
     logdebug("wss status = %02X", inp(info->iobase + 2));
@@ -740,17 +740,7 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
 
     // install IRQ handler
-    if (irq.hooked == false) {
-        irq.flags = 0;
-        irq.handler = snd_irqProcTable[devinfo.irq];
-        if (irqHook(devinfo.irq, &irq, true) == true) return SND_ERR_MEMALLOC;
-
-        // set current active device
-        snd_activeDevice[devinfo.irq] = this;
-
-        inIrq = false;
-    }
-    else return SND_ERR_STUCK_IRQ;
+    if (result = installIrq() != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -797,43 +787,17 @@ uint32_t sndWindowsSoundSystem::done() {
     return SND_ERR_OK;
 }
 
+uint32_t sndWindowsSoundSystem::resume()  {
+    // resume playback
+    wssRegWrite(devinfo.iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(devinfo.iobase, WSS_REG_INTERFACE_CONFIG) | 1);
+
+    isPaused = false;
+    return SND_ERR_RESUMED;
+}
+
 uint32_t sndWindowsSoundSystem::start() {
-    if (isPaused) {
-        // resume playback
-        wssRegWrite(devinfo.iobase, WSS_REG_INTERFACE_CONFIG, wssRegRead(devinfo.iobase, WSS_REG_INTERFACE_CONFIG) | 1);
-
-        isPaused = false;
-        return SND_ERR_OK;
-    };
-
-    // stop if playing
-    if (isPlaying) stop();
-
-    isPaused = true;
-    if (!isInitialised) return SND_ERR_UNINITIALIZED;
-
-    // call callback to fill buffer with sound data
-    {
-        if (callback == NULL) return SND_ERR_NULLPTR;
-#ifdef DEBUG_LOG
-        printf("prefill...\n");
-#endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
-        switch (rtn) {
-            case callbackOk         : break;
-            case callbackSkip       : 
-            case callbackComplete   : 
-            case callbackAbort      : 
-            default : return SND_ERR_NO_DATA;
-        }
-        renderPos += dmaBufferSamples;
-#ifdef DEBUG_LOG
-        printf("done\n");
-#endif
-    }
-
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+    uint32_t rtn = SND_ERR_OK;
+    if (rtn = prefill() != SND_ERR_OK) return rtn;
 
     // check if 16 bit transfer
     dmaChannel = devinfo.dma;

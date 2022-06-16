@@ -283,6 +283,9 @@ bool sndNonDmaBase::doneIrq0() {
     dpmi_unlockmemory(patchTable->pm_start, patchTable->pm_end - patchTable->pm_start);
     dpmi_unlockmemory(irq0struct,         sizeof(snddev_irq0_struct));
 
+    // remove callback
+    dpmi_freecallback_ex(irq0struct->rm_callback);
+
     // free DOS allocated memory
     dpmi_freedosmem(&irq0structBlock);
     dpmi_freedosmem(&realModeISRBlock);
@@ -454,41 +457,13 @@ uint32_t sndNonDmaBase::resume()
     setupIrq0();
 
     isPaused = false;
-    return SND_ERR_OK;
+    return SND_ERR_RESUMED;
 }
 
 
 uint32_t sndNonDmaBase::start() {
-    if (isPaused) return resume();
-
-    // stop if playing
-    if (isPlaying) stop();
-
-    isPaused = true;
-    if (!isInitialised) return SND_ERR_UNINITIALIZED;
-
-    // call callback to fill buffer with sound data
-    {
-        if (callback == NULL) return SND_ERR_NULLPTR;
-#ifdef DEBUG_LOG
-        printf("prefill...\n");
-#endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
-        switch (rtn) {
-            case callbackOk         : break;
-            case callbackSkip       : 
-            case callbackComplete   : 
-            case callbackAbort      : 
-            default : return SND_ERR_NO_DATA;
-        }
-        renderPos += dmaBufferSamples;
-#ifdef DEBUG_LOG
-        printf("done\n");
-#endif
-    }
-
-    // reset vars
-    currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
+    uint32_t rtn = SND_ERR_OK;
+    if (rtn = prefill() != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code

@@ -35,6 +35,9 @@ $(TARGET).lib : $(OBJS) .symbolic
 	wlib    $(TARGET).lib @$(TARGET).ls
 	del     $(TARGET).ls
 
+# custom rule to enable "option eliminate"
+dpmi.obj:
+	$(CC) dpmi.cpp $(CFLAGS) -zm
 	
 .cpp.obj:
 	$(CC) $< $(CFLAGS)

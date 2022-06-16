@@ -10,6 +10,7 @@ enum {
     SND_ERR_DMA,
     SND_ERR_NO_DATA,
     SND_ERR_UNINITIALIZED,
+    SND_ERR_RESUMED,
     
     
     // ...more in future :)
