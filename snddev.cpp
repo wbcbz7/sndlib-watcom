@@ -37,8 +37,17 @@ uint32_t sndlibDone() {
 }
 
 // ---------------- device info methods -------------------
+SoundDevice::deviceInfo::deviceInfo() {
+    privateBuf = new char[64];
+    clear();
+}
+
+SoundDevice::deviceInfo::~deviceInfo() {
+    if (privateBuf != NULL) delete[] privateBuf;
+}
+
 void SoundDevice::deviceInfo::clear() {
-    memset(privateBuf, sizeof(privateBuf), 0);
+    memset(privateBuf, 64, 0);
     name = version = NULL; caps = NULL;
     iobase = iobase2 = irq = irq2 = dma = dma2 = pci.addr = -1;
     maxBufferSize = flags = capsLen = 0;
@@ -46,22 +55,26 @@ void SoundDevice::deviceInfo::clear() {
 
 // fix private buffer pointers
 void SoundDevice::deviceInfo::privFixup(const SoundDevice::deviceInfo& rhs) {
-    if ((name >= rhs.privateBuf) && (name < rhs.privateBuf + sizeof(privateBuf))) 
+    if ((name >= rhs.privateBuf) && (name < rhs.privateBuf + 64)) 
         name += (privateBuf - rhs.privateBuf);
-    if ((version >= rhs.privateBuf) && (version < rhs.privateBuf + sizeof(privateBuf))) 
+    if ((version >= rhs.privateBuf) && (version < rhs.privateBuf + 64)) 
         version += (privateBuf - rhs.privateBuf);
-    if (((const char*)caps >= rhs.privateBuf) && ((const char*)caps < rhs.privateBuf + sizeof(privateBuf))) 
+    if (((const char*)caps >= rhs.privateBuf) && ((const char*)caps < rhs.privateBuf + 64)) 
         caps = (const soundFormatCapability*)((const char*)caps + (privateBuf - rhs.privateBuf));
 }
 
 // copy constructor
 SoundDevice::deviceInfo::deviceInfo(const SoundDevice::deviceInfo& rhs) {
     memcpy(this, &rhs, sizeof(deviceInfo));
+    privateBuf = new char[64];
+    memcpy(privateBuf, rhs.privateBuf, 64);
     privFixup(rhs);
 }
 
 SoundDevice::deviceInfo SoundDevice::deviceInfo::operator=(const SoundDevice::deviceInfo& rhs) {
     memcpy(this, &rhs, sizeof(deviceInfo));
+    privateBuf = new char[64];
+    memcpy(privateBuf, rhs.privateBuf, 64);
     privFixup(rhs);
     return *this;
 }
@@ -364,7 +377,6 @@ uint32_t DmaBufferDevice::installIrq() {
         // set current active device
         snd_activeDevice[devinfo.irq] = this;
 
-        inIrq = false;
         return SND_ERR_OK;
     }
     else return SND_ERR_STUCK_IRQ;

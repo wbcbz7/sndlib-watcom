@@ -443,7 +443,7 @@ uint32_t sndSBBase::fillDspInfo(SoundDevice::deviceInfo * info, uint32_t sbDspVe
 }
 
 const char* sndSBBase::dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion) {  
-    snprintf(info->privateBuf, sizeof(info->privateBuf), "DSP v.%d.%02d\0", (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF);
+    snprintf(info->privateBuf, 64, "DSP v.%d.%02d\0", (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF);
     info->version = info->privateBuf;
     return info->version;
 }
@@ -1418,7 +1418,7 @@ bool sndESSAudioDrive::irqProc() {
 
 const char* sndESSAudioDrive::dspVerToString(SoundDevice::deviceInfo * info, uint32_t ver)
 {
-    snprintf(info->privateBuf, sizeof(info->privateBuf), "ESS%d, rev. %d", modelNumber, modelId & 0xF);
+    snprintf(info->privateBuf, 64, "ESS%d, rev. %d", modelNumber, modelId & 0xF);
     info->version = info->privateBuf;
     return info->version;
 }

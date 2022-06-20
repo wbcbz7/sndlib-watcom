@@ -581,11 +581,11 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
                 break;
 
             default:
-                snprintf(info->privateBuf, sizeof(info->privateBuf), "unknown extended id 0x%X", extId);
+                snprintf(info->privateBuf, 64, "unknown extended id 0x%X", extId);
                 break;
             }
 
-            if (chipname != NULL) snprintf(info->privateBuf, sizeof(info->privateBuf), "%s Rev. %c", chipname, "AAAAABCE"[extId >> 5]);
+            if (chipname != NULL) snprintf(info->privateBuf, 64, "%s Rev. %c", chipname, "AAAAABCE"[extId >> 5]);
 
             info->version = info->privateBuf;
             featureLevel = WSS_FEATURE_CS4236;
@@ -593,14 +593,14 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
         }
         break;
         default:
-            snprintf(info->privateBuf, sizeof(info->privateBuf), "unknown new id 0x%X", newId);
+            snprintf(info->privateBuf, 64, "unknown new id 0x%X", newId);
             info->version = info->privateBuf;
             featureLevel = WSS_FEATURE_CS4231;
             break;
         }
         break;
     default:
-        snprintf(info->privateBuf, sizeof(info->privateBuf), "unknown old id 0x%X", oldId);
+        snprintf(info->privateBuf, 64, "unknown old id 0x%X", oldId);
         info->version = info->privateBuf;
         featureLevel = WSS_FEATURE_AD1848;
         break;

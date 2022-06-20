@@ -378,7 +378,6 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
 
     // set irqproc
     snd_activeDevice[0] = this;
-    inIrq = false;
 
     // fill conversion table, pass and link it to convinfo
     timerDivisor = honkGetDivisor(sampleRate);
@@ -654,7 +653,7 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base  address in private buffer
-    snprintf(info->privateBuf, sizeof(info->privateBuf), "port 0x%03X", info->iobase);
+    snprintf(info->privateBuf, 64, "port 0x%03X", info->iobase);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;
@@ -703,7 +702,7 @@ uint32_t sndDualCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base  address in private buffer
-    snprintf(info->privateBuf, sizeof(info->privateBuf), "port 0x%03X/0x%03X", info->iobase, info->iobase2);
+    snprintf(info->privateBuf, 64, "port 0x%03X/0x%03X", info->iobase, info->iobase2);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;
@@ -759,7 +758,7 @@ uint32_t sndStereoOn1::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base address in private buffer
-    snprintf(info->privateBuf, sizeof(info->privateBuf), "port 0x%03X", info->iobase);
+    snprintf(info->privateBuf, 64, "port 0x%03X", info->iobase);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;

@@ -257,7 +257,7 @@ uint32_t sndProAudioSpectrum::fillCodecInfo(SoundDevice::deviceInfo* info) {
             info->flags     = SND_DEVICE_CLOCKDRIFT;  // same for PAS16
 
             // put revision in private buffer
-            snprintf(info->privateBuf, sizeof(info->privateBuf), "Rev. %d", pasRegRead(info->iobase, PAS_REG_INTRCTLR) >> 5);
+            snprintf(info->privateBuf, 64, "Rev. %d", pasRegRead(info->iobase, PAS_REG_INTRCTLR) >> 5);
             info->version = info->privateBuf;
 
             break;

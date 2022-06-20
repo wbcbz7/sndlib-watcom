@@ -8,6 +8,7 @@
 #include "convert.h"
 #include "irq.h"
 #include "dma.h"
+#include "tinypci.h"
 
 #define SNDDEV_IRQ_PER_DEVICE
 
@@ -38,6 +39,7 @@ enum {
     SND_RES_IRQ2,
     SND_RES_DMA,
     SND_RES_DMA2,
+    SND_RES_PCI,
 };
 
 struct soundResourceInfo {
@@ -62,14 +64,7 @@ public:
         uint32_t                        irq2;           // -1 if none
         uint32_t                        dma;            // -1 if none
         uint32_t                        dma2;           // -1 if none
-        union {
-            struct {
-            uint32_t                    function:8;
-            uint32_t                    device:8;
-            uint32_t                    bus:8;
-            };
-            uint32_t                    addr;
-        }                               pci;            // PCI device address, -1 if none
+        pciAddress                      pci;            // PCI device address, -1 if none
         
         uint32_t                        maxBufferSize;  // maximum available buffer size in BYTES
         uint32_t                        flags;          // as usual
@@ -78,7 +73,7 @@ public:
         const soundFormatCapability*    caps;           // caps list pointer
 
         // private buffer for copied strings/etc
-        char                            privateBuf[64];
+        char                           *privateBuf;
         
         // clear struct
         void clear();
@@ -87,17 +82,20 @@ public:
         void privFixup(const deviceInfo& rhs);
 
         // regular constructor
-        deviceInfo() { clear(); }
+        deviceInfo();
 
         // copy constructor
         deviceInfo(const deviceInfo& rhs);
         deviceInfo operator=(const deviceInfo& rhs);
+
+        // destructor
+        ~deviceInfo();
     };
     
 public:
     // constructor (nothing fancy here)
     SoundDevice(const char* _name) :
-        name(_name), inIrq(false), currentFormat(SND_FMT_NULL), sampleRate(0),
+        name(_name), currentFormat(SND_FMT_NULL), sampleRate(0),
         callback(NULL), userdata(NULL) {
         memset(&irq,        0, sizeof(irqEntry));
         memset(&convinfo,   0, sizeof(convinfo));
@@ -159,17 +157,6 @@ public:
 
     // deinit device
     virtual uint32_t done();
-
-    // ---------------- interrupt stuff ------------------
-    
-    // IRQ stuff info
-    irqEntry        irq;
-    
-    // nested interrupt flag;
-    bool            inIrq;
-    
-    // irq procedure (returns true if needs to chain to old handler)
-    virtual bool    irqProc();
     
 protected:
     // ---------- internal running state flags ----------
@@ -178,7 +165,6 @@ protected:
     bool            isOpened;           //        open() ................. close()
     bool            isPlaying;          //               play() ... stop()
     bool            isPaused;           //               pause() .. play()
-
 
     // ------------------ device info --------------------
     SoundDevice::deviceInfo     devinfo;
@@ -191,6 +177,15 @@ protected:
     soundDeviceCallback         callback;
     void*                       userdata;
     soundFormatConverterInfo    convinfo;
+
+public:
+    // ---------------- interrupt stuff ------------------
+    
+    // IRQ stuff info
+    irqEntry        irq;
+    
+    // irq procedure (returns true if needs to chain to old handler)
+    virtual bool    irqProc();
 
 };
 

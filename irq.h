@@ -5,6 +5,7 @@
 
 #include <i86.h>
 #include <dos.h>
+#include <stdint.h>
 #include "dpmi.h"
 
 #define irqcall __interrupt __far
@@ -27,19 +28,19 @@ struct irqInfo {
 };
 
 struct irqEntry {
-    unsigned long   hooked;
-    unsigned long   num;
-    unsigned long   flags;
-    unsigned long   oldmask;
-    irqInfo        *info;
-
-    // protected-mode
-    void (irqcall  *oldhandler)();
-    void (irqcall  *handler)();
+    uint8_t   hooked;
+    uint8_t   num;
+    uint8_t   flags;
+    uint8_t   oldmask;
+    irqInfo  *info;
 
     // real-mode old mode handler
     _dpmi_rmpointer rmhandler;
     _dpmi_rmpointer oldrmhandler;
+
+    // protected-mode
+    void (irqcall  *oldhandler)();
+    void (irqcall  *handler)();
 };
 
 // protected mode hook
