@@ -408,6 +408,7 @@ uint32_t sndSBBase::sbDetect(SoundDevice::deviceInfo *info, bool manualDetect) {
                     if (info->dma != -1) break;
                 }
                 dmaFree(&testblk);
+                sbDspWrite(info->iobase, 0xD3);
                 sbDspReset(info->iobase);
 
                 if (info->dma == -1) return 0;
@@ -533,10 +534,13 @@ uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_
     // fill info
     info->maxBufferSize = 32768;  // BYTES
     switch (sbDspVersion >> 8) {
-        case 1:
-            // SB 1.x w/o autoinit - not supported!
-            return 0;
-        
+        case 1: 
+            // SB 1.x w/o autoinit
+            info->caps      = sb2OldCaps;
+            info->capsLen   = arrayof(sb2OldCaps);
+            info->name      = "Sound Blaster 1.0";
+            info->flags     = SND_DEVICE_CLOCKDRIFT;
+            break;
         case 2:
         case 4: // SB16 doesn't support SBPro stereo mode!            
             if (sbDspVersion == 0x200) {
@@ -583,9 +587,6 @@ uint32_t sndSoundBlaster2Pro::detect(SoundDevice::deviceInfo *info) {
     this->devinfo.clear();
     this->dspVersion = sbDetect(&this->devinfo, true);
     
-    // filter out no SB + SB 1.0 (w/o autoinit)
-    if (this->dspVersion < 0x200) return SND_ERR_NOTFOUND;
-    
     // fill DSP version
     dspVerToString(&this->devinfo, this->dspVersion);
     
@@ -622,6 +623,7 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
                     
                     else 
                         // samplerate > 22222hz, fallthrough here
+            case 1:
             case 2:
             case 4: // SB16 doesn't support SBPro stereo mode!
                     // convert 16bit to 8bit unsigned, stereo to mono, check for rate limit
@@ -631,7 +633,6 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
                     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
                     
                     break;
-                    
                     
             default:
                     return SND_ERR_UNSUPPORTED;
@@ -680,12 +681,15 @@ uint32_t sndSoundBlaster2Pro::resume() {
     sbDspWrite(devinfo.iobase, 0xD1);
 
     // resume DMA
-    // select normal or hispeed mode
-    if (isHighspeed) {
-        // idk
-        sbDspWrite(devinfo.iobase, 0x90);       // UNRELIABLE
-    } else {
-        sbDspWrite(devinfo.iobase, 0xD4);
+    switch (playbackType) {
+        case SingleCycle:
+        case AutoInit:
+            sbDspWrite(devinfo.iobase, 0xD4);
+            break;
+        case HighSpeed:
+            // idk
+            sbDspWrite(devinfo.iobase, 0x90);       // UNRELIABLE
+            break;
     }
 
     isPaused = false;
@@ -709,11 +713,6 @@ uint32_t sndSoundBlaster2Pro::start() {
     sbDspWrite(devinfo.iobase, 0x40);
     sbDspWrite(devinfo.iobase, sbTimeConstantAccurate(sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)));      // doubled for sbpro stereo
     
-    // set block size
-    sbDspWrite(devinfo.iobase, 0x48);
-    sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) & 0xFF);
-    sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) >> 8);
-    
     // program DMA controller for transfer
     if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead))
         return SND_ERR_DMA;
@@ -728,17 +727,31 @@ uint32_t sndSoundBlaster2Pro::start() {
     }
     
     // select normal or hispeed mode and enable DMA playback
-    if ((sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)) > 22222) {
-        isHighspeed = true;
-        sbDspWrite(devinfo.iobase, 0x90);
+    if (dspVersion >= 0x200) {
+        // set block size
+        sbDspWrite(devinfo.iobase, 0x48);
+        sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) & 0xFF);
+        sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) >> 8);
+        if ((sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)) > 22222) {
+            playbackType = AutoInit;
+            sbDspWrite(devinfo.iobase, 0x90);
 #ifdef DEBUG_LOG
-        printf("highspeed mode\n");
+            printf("highspeed mode\n");
 #endif
-    } else {
-        isHighspeed = false;
-        sbDspWrite(devinfo.iobase, 0x1C);
+        } else {
+            playbackType = HighSpeed;
+            sbDspWrite(devinfo.iobase, 0x1C);
 #ifdef DEBUG_LOG
-        printf("normal mode\n");
+            printf("normal mode\n");
+#endif
+        }
+    } else {
+        playbackType = SingleCycle;
+        sbDspWrite(devinfo.iobase, 0x14);
+        sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) & 0xFF);
+        sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) >> 8);
+#ifdef DEBUG_LOG
+        printf("SB 1.x single cycle mode\n");
 #endif
     }
 #ifdef DEBUG_LOG
@@ -756,12 +769,15 @@ uint32_t sndSoundBlaster2Pro::start() {
 // pause
 uint32_t sndSoundBlaster2Pro::pause() {    
     
-    // select normal or hispeed mode
-    if (isHighspeed) {
-        // totally unreliable, at least on dosbox-x
-        sbDspReset(devinfo.iobase);
-    } else {
-        sbDspWrite(devinfo.iobase, 0xD0);
+    switch (playbackType) {
+        case SingleCycle:
+        case AutoInit:
+            sbDspWrite(devinfo.iobase, 0xD0);
+            break;
+        case HighSpeed:
+            // totally unreliable, at least on dosbox-x
+            sbDspReset(devinfo.iobase);
+            break;
     }
 
     // disable speaker
@@ -778,16 +794,17 @@ uint32_t sndSoundBlaster2Pro::ioctl(uint32_t function, void * data, uint32_t len
 
 uint32_t sndSoundBlaster2Pro::stop() {
     if (isPlaying) {
-        // stop dma
-        // select normal or hispeed mode
-        if (isHighspeed) {
-#if SB2_HISPEED_FAST_RESUME
-            sbDspReset(devinfo.iobase);
-#else
-
-#endif
-        } else {
-            sbDspWrite(devinfo.iobase, 0xDA);
+        // stop DMA
+        switch (playbackType) {
+            case SingleCycle:
+                sbDspWrite(devinfo.iobase, 0xD0);
+                break;
+            case AutoInit:
+                sbDspWrite(devinfo.iobase, 0xDA);
+                break;
+            case HighSpeed:
+                sbDspReset(devinfo.iobase);
+                break;
         }
         
         dmaStop(dmaChannel);
@@ -804,6 +821,13 @@ uint32_t sndSoundBlaster2Pro::stop() {
 
 // irq procedure
 bool sndSoundBlaster2Pro::irqProc() {
+    // restart block if single cycle
+    if ((playbackType == SingleCycle) && (!isPaused)) {
+        sbDspWrite(devinfo.iobase, 0x14);
+        sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) & 0xFF);
+        sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) >> 8);
+    }
+
     // advance play pointers
     irqAdvancePos();
     

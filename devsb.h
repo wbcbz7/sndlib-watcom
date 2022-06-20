@@ -16,7 +16,6 @@
 
 // base SB driver
 class sndSBBase : public IsaDmaDevice {
-    
 public:
     // constructor (nothing fancy here)
     sndSBBase(const char *name) : IsaDmaDevice(name) {
@@ -113,7 +112,7 @@ protected:
 
 // SB 2.0/Pro driver
 class sndSoundBlaster2Pro : public sndSBBase {
-    
+
 public:
     // constructor (nothing fancy here)
     sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 2.0/Pro") {
@@ -162,9 +161,15 @@ public:
     //virtual uint32_t done();
     
 private:
-    
+
+    enum playbackType {
+        SingleCycle = 0,        // SB 1.x/2.0 only
+        AutoInit,               // SB 2.01+/Pro up to 11m/22s
+        HighSpeed               // SB 2.01+/Pro above 11m/22s
+    };
+
     // is highspeed? flag
-    bool isHighspeed;
+    playbackType    playbackType;
     
     // fill info according to DSP version
     virtual uint32_t fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion);
