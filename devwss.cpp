@@ -889,6 +889,9 @@ uint32_t sndWindowsSoundSystem::stop() {
 
 // irq procedure
 bool sndWindowsSoundSystem::irqProc() {
+    // test if WSS interrupt
+    if ((inp(devinfo.iobase + 2) & 0x1) == 0) return true;      // else chain to previous ISR
+    
     // advance play pointers
     irqAdvancePos();
 
