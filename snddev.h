@@ -216,7 +216,7 @@ protected:
 
     uint64_t        currentPos;                 // total playback  pos
     uint64_t        renderPos;                  // total rendering pos
-    uint64_t        irqs;                       // total IRQs count
+    uint32_t        irqs;                       // total IRQs count
     
     // each block contains one or more buffers (2 in our case)
     

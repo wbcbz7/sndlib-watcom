@@ -15,7 +15,6 @@
 
 #define arrayof(x) (sizeof(x) / sizeof(x[0]))
 
-volatile static bool sndWindowsSoundSystem::irqFound = false;
 const size_t probeDataLength = 64;
 const size_t probeIrqLength = 4;
 
@@ -368,8 +367,6 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 #ifdef DEBUG_LOG
             logdebug("wss status = %02X", inp(info->iobase + 2));
 #endif
-            irqFound = false;
-
             // hook
             if (irqHook(*irq, &irqstuff, true)) continue;
 

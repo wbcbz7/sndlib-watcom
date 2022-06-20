@@ -159,14 +159,6 @@ public:
     virtual uint32_t done();
 
 protected:
-
-    // identification info
-    uint32_t        featureLevel;               // detected feature level
-    uint32_t        oldId;                      // I12 aka WSS_REG_MODE_ID
-    uint32_t        newId;                      // I25 aka WSS_REG_EXTENDED_ID
-    uint32_t        extId;                      // X25
-
-
     // is GUS?
     bool            isGus;
     bool            is64khz;
@@ -196,12 +188,16 @@ protected:
     // kickstart WSS to enable probing
     bool    kickstartProbingPlayback(SoundDevice::deviceInfo *info, uint32_t dmaChannel, ::dmaBlock &block, uint32_t probeLength, bool enableIrq);
 
+    // identification info
+    uint32_t        featureLevel;               // detected feature level
+    uint32_t        oldId;                      // I12 aka WSS_REG_MODE_ID
+    uint32_t        newId;                      // I25 aka WSS_REG_EXTENDED_ID
+    uint32_t        extId;                      // X25
+
     // --------------------------- IRQ stuff --------------------
 
     virtual bool    irqProc();
 
     // used during IRQ discovery only
     static void __interrupt wssDetectIrqProc();
-    volatile static bool    irqFound;
-
 };
