@@ -1,6 +1,4 @@
 #pragma once
-#ifndef __LOGERROR_H__
-#define __LOGERROR_H__
 
 /** simple error handling stuff 
     --wbcbz7 l8.ob.zol8
@@ -22,6 +20,7 @@ void va_write(FILE *f, const char* format, ...);
 void loginit(char* fname);
 extern char *logerr_header, *logfatal_header, *logdebug_header;
 
+#ifdef DEBUG_LOG
 
 #ifdef __WINDOWS_386__
 
@@ -66,4 +65,10 @@ extern char *logerr_header, *logfatal_header, *logdebug_header;
                             fprintf(stderr,  text,  ##__VA_ARGS__); \
                             fprintf(logfile, text,  ##__VA_ARGS__); }
 
+#else 
+#define logerr(a, ...)
+#define logfatal(a, ...)
+#define logwrite(...) 
+#define logprint(...)
+#define logdebug(a, ...)
 #endif
