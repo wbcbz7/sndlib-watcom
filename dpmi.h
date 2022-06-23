@@ -99,6 +99,11 @@ typedef struct {
     unsigned char reserved[12];
 } _dpmi_mem_info;
 
+typedef struct {
+    void*         linearPtr;
+    unsigned long handle;
+} _dpmi_memory_block;
+
 // dpmi realmode pointer struct
 typedef union {
     struct {
@@ -143,9 +148,15 @@ unsigned long dpmi_iswriteable(unsigned long selector);
 
 void dpmi_getdosmem(int size, _dpmi_ptr *p, int *largestAvailBlock = NULL);    // SIZE IN PARAGRAPHS!!!!
 int dpmi_dosmemlargestavail();
-
 void dpmi_freedosmem(_dpmi_ptr *p);
+
+void dpmi_getmem (unsigned long size, _dpmi_memory_block *p);
+void dpmi_freemem(_dpmi_memory_block *p);
+
 void dpmi_rminterrupt(int int_num, _dpmi_rmregs *regs);
+void dpmi_rmcall(_dpmi_rmregs *regs);
+void dpmi_rmcall_ex(_dpmi_rmregs *regs, _dpmi_rmpointer ptr);
+
 void * dpmi_mapphysical(unsigned long size, void *p);
 void dpmi_unmapphysical(void *p);
 
@@ -176,8 +187,6 @@ void dpmi_unlockmemory(void *p, unsigned long size);
 int rmint386(int intnum, union REGS *in, union REGS *out);
 int rmint386x(int intnum, union REGS *in, union REGS *out, struct SREGS *seg);
 void rmintr(int intnum, union REGPACK *r);
-
-void dpmi_yield();
 
 extern unsigned int dpmi_status;
 extern unsigned int dpmi_returncode;

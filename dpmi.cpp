@@ -10,7 +10,7 @@
    some useful DPMI functions
    by wbcbz7 zo.oz.zolb - l5.ll.zozl
 
-    this mostly covers frequently used DPMI 0.9 calls (+ some 1.0), and several DOS extender vendor extensions
+    this mostly covers frequently used DPMI 0.9 calls (+ some 1.0), and some DOS extender vendor extensions
     it was never meant to be a complete DPMI adapter, so if you have something missing here, feel free to
     add it by yourself :)
     
@@ -26,7 +26,7 @@ static _dpmi_rmregs dpmi_rmregs;
 // dpmi status (carry flag)
 unsigned int dpmi_status;
 
-// dpmi functions return code (few servers support them, i.e. DOS/32A does)
+// dpmi fucntions return code (few servers support them, i.e. DOS/32A does)
 unsigned int dpmi_returncode;
 
 
@@ -822,6 +822,95 @@ void dpmi_rminterrupt(int int_num, _dpmi_rmregs *regs) {
 }
 
 /*
+2.21 - Function 0301h - Call Real Mode Procedure With Far Return Frame:
+-----------------------------------------------------------------------
+
+  Simulates a FAR CALL to a real mode procedure. The called procedure must
+return by executing a RETF instruction.
+
+In:
+  AX     = 0301h
+  BH     = must be 0
+  CX     = number of words to copy from the protected mode stack to the real
+           mode stack
+  ES:EDI = selector:offset of real mode register data structure in the
+           following format:
+
+           Offset  Length  Contents
+           00h     4       EDI
+           04h     4       ESI
+           08h     4       EBP
+           0ch     4       reserved, ignored
+           10h     4       EBX
+           14h     4       EDX
+           18h     4       ECX
+           1ch     4       EAX
+           20h     2       CPU status flags
+           22h     2       ES
+           24h     2       DS
+           26h     2       FS
+           28h     2       GS
+           2ah     2       IP
+           2ch     2       CS
+           2eh     2       SP
+           30h     2       SS
+
+Out:
+  if successful:
+    carry flag clear
+    ES:EDI = selector offset of modified real mode register data structure
+
+  if failed:
+    carry flag set
+
+Notes:
+) The CS:IP in the real mode register data structure specifies the address of
+  the real mode procedure to call.
+
+) If the SS:SP fields in the real mode register data structure are zero, a
+  real mode stack will be provided by the host. Otherwise the real mode SS:SP
+  will be set to the specified values before the procedure is called.
+
+) Values placed in the segment register positions of the data structure must
+  be valid for real mode. That is, the values must be paragraph addresses, not
+  protected mode selectors.
+
+) The target real mode procedure must return with the stack in the same state
+  as when it was called. This means that the real mode code may switch stacks
+  while it is running, but must return on the same stack that it was called
+  on and must return with a RETF and should not clear the stack of any
+  parameters that were passed to it on the stack.
+
+) When this function returns, the real mode register data structure will
+  contain the values that were returned by the real mode procedure. The CS:IP
+  and SS:SP values will be unmodified in the data structure.
+
+) It is the caller's responsibility to remove any parameters that were pushed
+  on the protected mode stack.
+*/
+
+void dpmi_rmcall(_dpmi_rmregs *regs) {
+    dpmi_zero_reg_structs();
+    
+    dpmi_regs.w.ax  = 0x301;
+    dpmi_regs.w.bx  = 0;
+    
+    dpmi_sregs.es   = FP_SEG(regs);
+    dpmi_regs.x.edi = FP_OFF(regs);
+    
+    int386x(0x31, &dpmi_regs, &dpmi_regs, &dpmi_sregs);
+    
+    dpmi_status = dpmi_regs.x.cflag;
+    dpmi_returncode = dpmi_regs.w.ax;
+}
+
+void dpmi_rmcall_ex(_dpmi_rmregs *regs, _dpmi_rmpointer ptr) {
+    regs->CS = ptr.segment; regs->IP = ptr.offset;
+    regs->SS = regs->SP = 0;
+    dpmi_rmcall(regs);
+}
+
+/*
 2.32 - Function 0800h - Physical Address Mapping:
 -------------------------------------------------
 
@@ -1417,6 +1506,90 @@ void dpmi_getmeminfo(_dpmi_mem_info __far *p) {
 }
 
 /*
+2.29 - Function 0501h - Allocate Memory Block:
+----------------------------------------------
+
+  Allocates a block of extended memory.
+
+In:
+  AX     = 0501h
+  BX:CX  = size of block in bytes (must be non-zero)
+
+Out:
+  if successful:
+    carry flag clear
+    BX:CX  = linear address of allocated memory block
+    SI:DI  = memory block handle (used to resize and free block)
+
+  if failed:
+    carry flag set
+
+Notes:
+) The allocated block is guaranteed to have at least dword alignment.
+
+) This function does not allocate any descriptors for the memory block. It is
+  the responsibility of the client to allocate and initialize any descriptors
+  needed to access the memory with additional function calls.
+
+*/
+
+void dpmi_getmem(unsigned long size, _dpmi_memory_block *p) {
+    if (p == NULL) return;
+    dpmi_zero_reg_structs();
+    
+    dpmi_regs.w.ax = 0x501;
+    
+    dpmi_regs.w.bx = (unsigned short)(size >> 16);
+    dpmi_regs.w.cx = (unsigned short)(size & 0xFFFF);
+    
+    int386x(0x31, &dpmi_regs, &dpmi_regs, &dpmi_sregs);
+    
+    p->handle    = (unsigned long)(((unsigned long)dpmi_regs.w.si << 16) | dpmi_regs.w.di);
+    p->linearPtr = (void *)       (((unsigned long)dpmi_regs.w.bx << 16) | dpmi_regs.w.cx);
+
+    dpmi_status = dpmi_regs.x.cflag;
+    dpmi_returncode = dpmi_regs.w.ax;
+}
+
+/*
+2.30 - Function 0502h - Free Memory Block:
+------------------------------------------
+
+  Frees a memory block previously allocated with the Allocate Memory Block
+function (0501h).
+
+In:
+  AX     = 0502h
+  SI:DI  = memory block handle
+
+Out:
+  if successful:
+    carry flag clear
+
+  if failed:
+    carry flag set
+
+Notes:
+) No descriptors are freed by this call. It is the client's responsibility to
+  free any descriptors that it previously allocated to 
+*/
+
+void dpmi_freemem(_dpmi_memory_block *p) {
+    if (p == NULL) return;
+    dpmi_zero_reg_structs();
+    
+    dpmi_regs.w.ax = 0x501;
+    
+    dpmi_regs.w.si = (unsigned short)(p->handle >> 16);
+    dpmi_regs.w.di = (unsigned short)(p->handle & 0xFFFF);
+    
+    int386x(0x31, &dpmi_regs, &dpmi_regs, &dpmi_sregs);
+
+    dpmi_status = dpmi_regs.x.cflag;
+    dpmi_returncode = dpmi_regs.w.ax;
+}
+
+/*
 
 2.37 - Function EEFFh - Get DOS Extender Information:
 -----------------------------------------------------
@@ -1693,14 +1866,6 @@ void dpmi_unlockmemory(void *p, unsigned long size) {
     
     dpmi_status = dpmi_regs.x.cflag;
     dpmi_returncode = dpmi_regs.w.ax;
-}
-
-// a very common adopted yield() via INT2F/AX=1680
-void dpmi_yield() {
-    _asm {
-        mov     eax, 0x1680
-        int     0x2f
-    }
 }
 
 // dpmi realmode interrupt caller using REGS\SREGS structures
@@ -2046,7 +2211,9 @@ _dos32a_performance_counters _far *dos32a_get_performance_counters(void _far (*a
 // DJGPP compatibility stuff
 #ifdef _DPMI_DJGPP_COMPATIBILITY
 
-void __dpmi_yield(void) { dpmi_yield(); }
+void __dpmi_yield(void) {
+    // TODO: call INT2F/AX=1680
+}
 
 int	__dpmi_allocate_ldt_descriptors(int _count) {
     int rtn = dpmi_getdescriptors(_count);
