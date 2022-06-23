@@ -20,7 +20,7 @@ LFLAGS   =
 
 # add object files here
 OBJS     = convert.obj dma.obj dpmi.obj tinypci.obj irq.obj logerror.obj sndmisc.obj
-OBJS     = $(OBJS) snddev.obj devsb.obj devwss.obj devpas.obj devhonk.obj devhonka.obj
+OBJS     = $(OBJS) snddev.obj devsb.obj devwss.obj devpas.obj devhda.obj devhonk.obj devhonka.obj
 
 OBJLIST  = $(OBJS)
 OBJSTR   = file {$(OBJLIST)}
@@ -38,6 +38,8 @@ $(TARGET).lib : $(OBJS) .symbolic
 # custom rule to enable "option eliminate"
 dpmi.obj:
 	$(CC) dpmi.cpp $(CFLAGS) -zm
+dma.obj:
+	$(CC) dma.cpp $(CFLAGS) -zm
 tinypci.obj:
 	$(CC) tinypci.cpp $(CFLAGS) -zm
 	
