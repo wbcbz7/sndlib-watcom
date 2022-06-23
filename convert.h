@@ -46,3 +46,5 @@ int __sndconvcall sndconv_16m_xlat(void *dst, void *src, uint32_t length, uint32
 int __sndconvcall sndconv_8m_xlat (void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t xlatPtr);
 int __sndconvcall sndconv_16s_xlat(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t xlatPtr);
 int __sndconvcall sndconv_8s_xlat (void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t xlatPtr);
+
+int __sndconvcall sndconv_8_16(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t lenmul);

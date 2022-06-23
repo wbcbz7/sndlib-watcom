@@ -29,7 +29,7 @@ enum {
 struct soundFormatCapability {
     soundFormat     format;             // combination of soundFormat flags
     int32_t         ratesLength;        // positive for fixed rates, -2 for rates range [rates[0]; rates[1]]
-    const uint32_t *rates;              // ratesLength length, ascending
+    const uint32_t *rates;              // ratesLength length, NOT sorted!
 };
 
 

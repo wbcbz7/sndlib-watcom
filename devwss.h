@@ -98,7 +98,7 @@ public:
     sndWindowsSoundSystem() : IsaDmaDevice("Windows Sound System") {
 
         // fill with defaults
-        isDetected = isInitialised = isPlaying = isGus = is64khz = isVariableSampleRate = isPaused = false;
+        isGus = is64khz = isVariableSampleRate = isPaused = false;
         featureLevel = WSS_FEATURE_AD1848;
         oldId = newId = extId = 0;
 

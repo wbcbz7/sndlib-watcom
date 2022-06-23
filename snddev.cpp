@@ -37,8 +37,9 @@ uint32_t sndlibDone() {
 }
 
 // ---------------- device info methods -------------------
-SoundDevice::deviceInfo::deviceInfo() {
-    privateBuf = new char[64];
+SoundDevice::deviceInfo::deviceInfo(uint32_t _privateBufSize) {
+    privateBufSize = _privateBufSize;
+    privateBuf = new char[privateBufSize];
     clear();
 }
 
@@ -47,7 +48,7 @@ SoundDevice::deviceInfo::~deviceInfo() {
 }
 
 void SoundDevice::deviceInfo::clear() {
-    memset(privateBuf, 64, 0);
+    memset(privateBuf, privateBufSize, 0);
     name = version = NULL; caps = NULL;
     iobase = iobase2 = irq = irq2 = dma = dma2 = pci.addr = -1;
     maxBufferSize = flags = capsLen = 0;
@@ -55,26 +56,33 @@ void SoundDevice::deviceInfo::clear() {
 
 // fix private buffer pointers
 void SoundDevice::deviceInfo::privFixup(const SoundDevice::deviceInfo& rhs) {
-    if ((name >= rhs.privateBuf) && (name < rhs.privateBuf + 64)) 
+    if ((name >= rhs.privateBuf) && (name < rhs.privateBuf + privateBufSize)) 
         name += (privateBuf - rhs.privateBuf);
-    if ((version >= rhs.privateBuf) && (version < rhs.privateBuf + 64)) 
+    if ((version >= rhs.privateBuf) && (version < rhs.privateBuf + privateBufSize)) 
         version += (privateBuf - rhs.privateBuf);
-    if (((const char*)caps >= rhs.privateBuf) && ((const char*)caps < rhs.privateBuf + 64)) 
+    if (((const char*)caps >= rhs.privateBuf) && ((const char*)caps < rhs.privateBuf + privateBufSize)) 
         caps = (const soundFormatCapability*)((const char*)caps + (privateBuf - rhs.privateBuf));
 }
 
 // copy constructor
 SoundDevice::deviceInfo::deviceInfo(const SoundDevice::deviceInfo& rhs) {
     memcpy(this, &rhs, sizeof(deviceInfo));
-    privateBuf = new char[64];
-    memcpy(privateBuf, rhs.privateBuf, 64);
+
+    privateBuf = new char[rhs.privateBufSize];
+    privateBufSize = rhs.privateBufSize;
+
+    memcpy(privateBuf, rhs.privateBuf, rhs.privateBufSize);
     privFixup(rhs);
 }
 
-SoundDevice::deviceInfo SoundDevice::deviceInfo::operator=(const SoundDevice::deviceInfo& rhs) {
+SoundDevice::deviceInfo& SoundDevice::deviceInfo::operator=(const SoundDevice::deviceInfo& rhs) {
+    if (privateBuf != NULL) delete[] privateBuf;
     memcpy(this, &rhs, sizeof(deviceInfo));
-    privateBuf = new char[64];
-    memcpy(privateBuf, rhs.privateBuf, 64);
+
+    privateBuf = new char[rhs.privateBufSize];
+    privateBufSize = rhs.privateBufSize;
+
+    memcpy(privateBuf, rhs.privateBuf, rhs.privateBufSize);
     privFixup(rhs);
     return *this;
 }
@@ -244,8 +252,17 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
         else return SND_ERR_UNKNOWN_FORMAT; // handled by case above
     }
     
+    if (((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT8) && ((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16)) {
+        // 8->16
+        conv->proc   = &sndconv_8s_8m;
+        conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) != (dstfmt & SND_FMT_SIGN_MASK)) ? 0x80808080 : 0;
+        conv->parm2  = (srcfmt & SND_FMT_STEREO) ? 2 :1;
+        conv->format = dstfmt;
+        return SND_ERR_OK;
+    }
+
     if (((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT8) && ((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT8)) {
-        // 16b -> 16b 
+        // 8b -> 8b 
         if (((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_STEREO) && ((dstfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO))
             if ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED)  {
                 // stereo->mono signed
@@ -383,7 +400,10 @@ uint32_t DmaBufferDevice::installIrq() {
 }
 
 uint32_t DmaBufferDevice::removeIrq() {
-    return SND_ERR_UNSUPPORTED;
+    // unhook irq if hooked
+    if (irq.hooked) irqUnhook(&irq, false);
+
+    return SND_ERR_OK;
 }
 
 // -----------------------------------------------
@@ -450,8 +470,8 @@ uint32_t DmaBufferDevice::dmaBufferInit(uint32_t bufferSize, soundFormatConverte
     dmaBlockSamples  = dmaBlockSize  / conv->bytesPerSample;
 
     // allocate DMA buffer
-    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) != 0) return SND_ERR_MEMALLOC;
-    if (dmaAlloc(dmaBlockSize, &dmaBlock) != 0) return SND_ERR_MEMALLOC;
+    if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) == false) return SND_ERR_MEMALLOC;
+    if (dmaAlloc(dmaBlockSize, &dmaBlock) == false) return SND_ERR_MEMALLOC;
     
     // lock DPMI memory for buffer
     dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+64);

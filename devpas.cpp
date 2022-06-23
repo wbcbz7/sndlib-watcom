@@ -257,7 +257,7 @@ uint32_t sndProAudioSpectrum::fillCodecInfo(SoundDevice::deviceInfo* info) {
             info->flags     = SND_DEVICE_CLOCKDRIFT;  // same for PAS16
 
             // put revision in private buffer
-            snprintf(info->privateBuf, 64, "Rev. %d", pasRegRead(info->iobase, PAS_REG_INTRCTLR) >> 5);
+            snprintf(info->privateBuf, info->privateBufSize, "Rev. %d", pasRegRead(info->iobase, PAS_REG_INTRCTLR) >> 5);
             info->version = info->privateBuf;
 
             break;
@@ -323,6 +323,8 @@ uint32_t sndProAudioSpectrum::init(SoundDevice::deviceInfo* info)
     return SND_ERR_OK;
 }
 
+// СЛОМАНО!!!!!! смешаны convinfo и conv, блобимся в космос и сосем
+
 uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
     uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
@@ -331,13 +333,13 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
     if (isPlaying) stop();
 
     // clear converter info
-    memset(&convinfo, 0, sizeof(convinfo));
+    memset(conv, 0, sizeof(convinfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
     if (flags & SND_OPEN_NOCONVERT) {
         // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     }
     else {
@@ -346,33 +348,33 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
         uint32_t maxFormat = (featureLevel == PAS_FEATURELEVEL_ORIGINAL ? SND_FMT_INT8 : SND_FMT_INT16);
         if ((fmt & SND_FMT_DEPTH_MASK) > maxFormat) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | maxFormat;
-            if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
         } else 
-            if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
     // pass converter info
 #ifdef DEBUG_LOG
     printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
 #endif
-    if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    convinfo.bytesPerSample = getBytesPerSample(newFormat);
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
 
     // we have all relevant info for opening sound device, do it now
     done();
 
     // allocate DMA buffer
-    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
 
     // install IRQ handler
-    if (result = installIrq() != SND_ERR_OK) return result;
+    if ((result = installIrq()) != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
     this->userdata = userdata;
 
     // pass coverter info
-    memcpy(conv, &convinfo, sizeof(convinfo));
+    memcpy(&convinfo, conv, sizeof(convinfo));
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;
@@ -422,7 +424,7 @@ uint32_t sndProAudioSpectrum::resume() {
 
 uint32_t sndProAudioSpectrum::start() {
     uint32_t rtn = SND_ERR_OK;
-    if (rtn = prefill() != SND_ERR_OK) return rtn;
+    if ((rtn = prefill()) != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code

@@ -364,7 +364,7 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     if (isOpened) close();
 
     // allocate DMA buffer
-    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
 
     // help watcom to allocate registers :)
     snddev_irq0_struct *irq0struct = this->irq0struct;
@@ -462,7 +462,7 @@ uint32_t sndNonDmaBase::resume()
 
 uint32_t sndNonDmaBase::start() {
     uint32_t rtn = SND_ERR_OK;
-    if (rtn = prefill() != SND_ERR_OK) return rtn;
+    if ((rtn = prefill()) != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code
@@ -653,7 +653,7 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base  address in private buffer
-    snprintf(info->privateBuf, 64, "port 0x%03X", info->iobase);
+    snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X", info->iobase);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;
@@ -702,7 +702,7 @@ uint32_t sndDualCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base  address in private buffer
-    snprintf(info->privateBuf, 64, "port 0x%03X/0x%03X", info->iobase, info->iobase2);
+    snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X/0x%03X", info->iobase, info->iobase2);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;
@@ -758,7 +758,7 @@ uint32_t sndStereoOn1::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base address in private buffer
-    snprintf(info->privateBuf, 64, "port 0x%03X", info->iobase);
+    snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X", info->iobase);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;

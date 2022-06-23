@@ -26,6 +26,20 @@ int __sndconvcall __declspec(naked) sndconv_memcpy_shl(void *dst, void *src, uin
     }
 }
 
+// 8 bit any -> 16 bit any (for HD audio and other PCI devices)
+int __sndconvcall sndconv_8_16(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t postmul) {
+    int8_t *p = (int8_t*)src;
+    int16_t *v = (int16_t*)dst;
+    
+    length *= postmul;
+    if (length == 0) return 0;
+    do {
+        *v++ = ((int16_t)(*p++ ^ xormask) << 8);
+    } while (--length != 0);
+    
+    return 0;
+}
+
 // 16bit stereo -> 16bit mono SIGNED
 int __sndconvcall sndconv_16s_16m(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t) {
     int16_t *p = (int16_t*)src;

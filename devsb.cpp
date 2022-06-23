@@ -443,7 +443,7 @@ uint32_t sndSBBase::fillDspInfo(SoundDevice::deviceInfo * info, uint32_t sbDspVe
 }
 
 const char* sndSBBase::dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion) {  
-    snprintf(info->privateBuf, 64, "DSP v.%d.%02d\0", (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF);
+    snprintf(info->privateBuf, info->privateBufSize, "DSP v.%d.%02d\0", (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF);
     info->version = info->privateBuf;
     return info->version;
 }
@@ -586,7 +586,10 @@ uint32_t sndSoundBlaster2Pro::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();
     this->dspVersion = sbDetect(&this->devinfo, true);
-    
+
+    // if dspVersion == 0 - SB not found!
+    if (this->dspVersion == 0) return SND_ERR_NOTFOUND;
+
     // fill DSP version
     dspVerToString(&this->devinfo, this->dspVersion);
     
@@ -650,10 +653,10 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     done();
 
     // allocate DMA buffer
-    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
     
     // allocate DMA buffer
-    if (result = installIrq() != SND_ERR_OK) return result;
+    if ((result = installIrq()) != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -714,7 +717,7 @@ uint32_t sndSoundBlaster2Pro::start() {
     sbDspWrite(devinfo.iobase, sbTimeConstantAccurate(sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)));      // doubled for sbpro stereo
     
     // program DMA controller for transfer
-    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead))
+    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead) == false)
         return SND_ERR_DMA;
 #ifdef DEBUG_LOG
     printf("dma ready\n");
@@ -915,10 +918,10 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     done();
 
     // allocate DMA buffer
-    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
 
     // allocate DMA buffer
-    if (result = installIrq() != SND_ERR_OK) return result;
+    if ((result = installIrq()) != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -949,7 +952,7 @@ uint32_t sndSoundBlaster16::resume() {
 
 uint32_t sndSoundBlaster16::start() {
     uint32_t rtn = SND_ERR_OK;
-    if (rtn = prefill() != SND_ERR_OK) return rtn;
+    if ((rtn = prefill()) != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code
@@ -966,7 +969,7 @@ uint32_t sndSoundBlaster16::start() {
     sbDspWrite(devinfo.iobase, sampleRate >> 8); sbDspWrite(devinfo.iobase, sampleRate & 0xFF);
 
     // program DMA controller for transfer
-    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead))
+    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead) == false)
         return SND_ERR_DMA;
 #ifdef DEBUG_LOG
     printf("dma ready\n");
@@ -1191,8 +1194,8 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | SND_FMT_INT16;
-            if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
         }
+        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
     // pass converter info
@@ -1206,10 +1209,10 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     done();
     
     // allocate DMA buffer
-    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
 
     // install IRQ handler
-    if (result = installIrq() != SND_ERR_OK) return result;
+    if ((result = installIrq()) != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -1240,7 +1243,7 @@ uint32_t sndESSAudioDrive::resume() {
 
 uint32_t sndESSAudioDrive::start() {
     uint32_t rtn = SND_ERR_OK;
-    if (rtn = prefill() != SND_ERR_OK) return rtn;
+    if ((rtn = prefill()) != SND_ERR_OK) return rtn;
 
     // ------------------------------------
     // device-specific code
@@ -1332,7 +1335,7 @@ uint32_t sndESSAudioDrive::start() {
     sbDspWrite(devinfo.iobase, 0xD1);
 
     // program DMA controller for transfer
-    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, ((demandModeEnable) && ((dmaBufferSize & 3) == 0) ? dmaModeDemand : dmaModeSingle) | dmaModeAutoInit | dmaModeRead))
+    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, ((demandModeEnable) && ((dmaBufferSize & 3) == 0) ? dmaModeDemand : dmaModeSingle) | dmaModeAutoInit | dmaModeRead) == false)
         return SND_ERR_DMA;
 #ifdef DEBUG_LOG
     printf("dma ready\n");
@@ -1418,7 +1421,7 @@ bool sndESSAudioDrive::irqProc() {
 
 const char* sndESSAudioDrive::dspVerToString(SoundDevice::deviceInfo * info, uint32_t ver)
 {
-    snprintf(info->privateBuf, 64, "ESS%d, rev. %d", modelNumber, modelId & 0xF);
+    snprintf(info->privateBuf, info->privateBufSize, "ESS%d, rev. %d", modelNumber, modelId & 0xF);
     info->version = info->privateBuf;
     return info->version;
 }

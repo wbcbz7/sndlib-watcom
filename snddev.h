@@ -58,12 +58,13 @@ public:
         const char*                     name;           // device name
         const char*                     version;        // device version
         
+        void*                           membase;        // NULL if none
         uint32_t                        iobase;         // -1 if none
         uint32_t                        iobase2;        // secondary (hey gus), -1 if none
-        uint32_t                        irq;            // -1 if none
-        uint32_t                        irq2;           // -1 if none
-        uint32_t                        dma;            // -1 if none
-        uint32_t                        dma2;           // -1 if none
+        uint32_t                        irq;            // -1   if none
+        uint32_t                        irq2;           // -1   if none
+        uint32_t                        dma;            // -1   if none
+        uint32_t                        dma2;           // -1   if none
         pciAddress                      pci;            // PCI device address, -1 if none
         
         uint32_t                        maxBufferSize;  // maximum available buffer size in BYTES
@@ -74,6 +75,7 @@ public:
 
         // private buffer for copied strings/etc
         char                           *privateBuf;
+        uint32_t                        privateBufSize;
         
         // clear struct
         void clear();
@@ -82,11 +84,11 @@ public:
         void privFixup(const deviceInfo& rhs);
 
         // regular constructor
-        deviceInfo();
+        deviceInfo(uint32_t _privateBufSize = 64);
 
         // copy constructor
         deviceInfo(const deviceInfo& rhs);
-        deviceInfo operator=(const deviceInfo& rhs);
+        deviceInfo& operator=(const deviceInfo& rhs);
 
         // destructor
         ~deviceInfo();
@@ -94,12 +96,13 @@ public:
     
 public:
     // constructor (nothing fancy here)
-    SoundDevice(const char* _name) :
+    SoundDevice(const char* _name, uint32_t _infoPrivateBufSize = 64) :
         name(_name), currentFormat(SND_FMT_NULL), sampleRate(0),
-        callback(NULL), userdata(NULL) {
+        callback(NULL), userdata(NULL), devinfo(_infoPrivateBufSize) {
         memset(&irq,        0, sizeof(irqEntry));
         memset(&convinfo,   0, sizeof(convinfo));
         devinfo.clear();
+        isDetected = isPaused = isPlaying = isInitialised = isOpened = false;
     }
     virtual ~SoundDevice() {
         if (isPlaying) stop();
@@ -193,7 +196,8 @@ public:
 // DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
 class DmaBufferDevice : public SoundDevice {
 public:
-    DmaBufferDevice(const char* _name) : SoundDevice(_name) {
+    DmaBufferDevice(const char* _name, uint32_t _infoPrivateBufSize = 64) :
+        SoundDevice(_name, _infoPrivateBufSize) {
         dmaChannel = -1;
         currentPos = irqs = 0;
         oldTotalPos = renderPos = 0;

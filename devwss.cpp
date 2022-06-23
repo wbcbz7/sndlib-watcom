@@ -581,11 +581,11 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
                 break;
 
             default:
-                snprintf(info->privateBuf, 64, "unknown extended id 0x%X", extId);
+                snprintf(info->privateBuf, info->privateBufSize, "unknown extended id 0x%X", extId);
                 break;
             }
 
-            if (chipname != NULL) snprintf(info->privateBuf, 64, "%s Rev. %c", chipname, "AAAAABCE"[extId >> 5]);
+            if (chipname != NULL) snprintf(info->privateBuf, info->privateBufSize, "%s Rev. %c", chipname, "AAAAABCE"[extId >> 5]);
 
             info->version = info->privateBuf;
             featureLevel = WSS_FEATURE_CS4236;
@@ -593,14 +593,14 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
         }
         break;
         default:
-            snprintf(info->privateBuf, 64, "unknown new id 0x%X", newId);
+            snprintf(info->privateBuf, info->privateBufSize, "unknown new id 0x%X", newId);
             info->version = info->privateBuf;
             featureLevel = WSS_FEATURE_CS4231;
             break;
         }
         break;
     default:
-        snprintf(info->privateBuf, 64, "unknown old id 0x%X", oldId);
+        snprintf(info->privateBuf, info->privateBufSize, "unknown old id 0x%X", oldId);
         info->version = info->privateBuf;
         featureLevel = WSS_FEATURE_AD1848;
         break;
@@ -734,10 +734,10 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     done();
 
     // allocate DMA buffer
-    if (result = dmaBufferInit(bufferSize, conv) != SND_ERR_OK) return result;
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
 
     // install IRQ handler
-    if (result = installIrq() != SND_ERR_OK) return result;
+    if ((result = installIrq()) != SND_ERR_OK) return result;
 
     // save callback info
     this->callback = callback;
@@ -794,7 +794,7 @@ uint32_t sndWindowsSoundSystem::resume()  {
 
 uint32_t sndWindowsSoundSystem::start() {
     uint32_t rtn = SND_ERR_OK;
-    if (rtn = prefill() != SND_ERR_OK) return rtn;
+    if ((rtn = prefill()) != SND_ERR_OK) return rtn;
 
     // check if 16 bit transfer
     dmaChannel = devinfo.dma;
@@ -806,7 +806,7 @@ uint32_t sndWindowsSoundSystem::start() {
     if (setFormat(&devinfo, sampleRate, convinfo.format) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     // program DMA controller for transfer
-    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead))
+    if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead) == false)
         return SND_ERR_DMA;
 #ifdef DEBUG_LOG
     logdebug("dma ready\n");
