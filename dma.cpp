@@ -19,12 +19,18 @@ dmaPorts dmaPorts[] = {
 
 bool dmaAlloc(size_t len, dmaBlock *blk) {
     // check block size
-    if ((len == 0) || (len > 65536)) logfatal("length must be nonzero and less than 64k\n");
+    if ((len == 0) || (len > 65536)) {
+        logerr("length must be nonzero and less than 64k\n");
+        return false;
+    }
     
     // allocate block "as-is"
     _dpmi_ptr dpmi_block;
     dpmi_getdosmem((len + 15) >> 4, &dpmi_block);
-    if (dpmi_status) logfatal("unable to allocate memory for DMA buffer\n");
+    if (dpmi_status) {
+        logerr("unable to allocate memory for DMA buffer\n");
+        return false;
+    }
     
     size_t linaddr = (dpmi_block.segment << 4);
     
@@ -36,30 +42,42 @@ bool dmaAlloc(size_t len, dmaBlock *blk) {
         
         // realloc block
         dpmi_freedosmem(&dpmi_block);
-        if (dpmi_status) logfatal("DPMI error\n");
+        if (dpmi_status) {
+            logerr("DPMI error\n");
+            return false;
+        }
         
         dpmi_getdosmem((newsize + 15) >> 4, &dpmi_block);
-        if (dpmi_status) logfatal("unable to allocate memory for DMA buffer\n");
+        if (dpmi_status) {
+            logerr("unable to allocate memory for DMA buffer\n");
+            return false;
+        }
         
         // test again
         blk->ptr = (void*)(((dpmi_block.segment << 4) + adjust) & ~0xFFFF);
         
         // test again
         linaddr = (size_t)blk->ptr;
-        if (((linaddr + len - 1) & ~0xFFFF) != (linaddr & ~0xFFFF)) logfatal("unable to allocate non-64K crossing DMA buffer\n");
+        if (((linaddr + len - 1) & ~0xFFFF) != (linaddr & ~0xFFFF)) {
+            logerr("unable to allocate non-64K crossing DMA buffer\n");
+            return false;
+        }
     } else {
         blk->ptr = (void*)linaddr;
     }
     
     blk->dpmi = dpmi_block;
-    return false;
+    return true;
 }
 
 bool dmaFree(dmaBlock *blk) {
     dpmi_freedosmem(&blk->dpmi);
-    if (dpmi_status) logfatal("unable to free DMA buffer\n");
+    if (dpmi_status) {
+        logerr("unable to free DMA buffer\n");
+        return false;
+    }
     
-    return false;
+    return true;
 }
 
 bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode) {
@@ -113,7 +131,7 @@ bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode) {
     //_enable_if_enabled(flags);
     _enable();
 
-    return false;
+    return true;
 }
 
 bool dmaPause(size_t chan) {
@@ -127,7 +145,7 @@ bool dmaPause(size_t chan) {
     // mask channel
     outp(dmaPorts[chan].mask,    0x04 | (chan & 3));
     
-    return false;
+    return true;
 };
 
 bool dmaResume(size_t chan) {
@@ -141,7 +159,7 @@ bool dmaResume(size_t chan) {
     // unmask channel
     outp(dmaPorts[chan].mask,    0x00 | (chan & 3));
     
-    return false;
+    return true;
 };
 
 bool dmaStop(size_t chan) {
@@ -158,7 +176,7 @@ bool dmaStop(size_t chan) {
     // clear channel
     outp(dmaPorts[chan].clear,   0x00);
     
-    return false;
+    return true;
 };
 
 unsigned short dmaRead(unsigned short port); 
@@ -169,7 +187,7 @@ unsigned long dmaGetPos(size_t chan, bool lockInts) {
 #ifdef DEBUG
     if ((chan == 4) || (chan > 7)) {
         logerr("channel number must be for 0 to 7 (excluding 4)\n");
-        return true;
+        return 0;
     }
 #endif
     
