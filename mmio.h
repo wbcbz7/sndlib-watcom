@@ -27,8 +27,6 @@ uint8_t  MMIO_WRITE8_IMPL (void *addr, uint8_t val);
 #define MMIO_FORCE_MODIFY16(addr, mask, val) MMIO_FORCE_WRITE16(addr, (MMIO_FORCE_READ16(addr) & (~mask)) | ((val) & (mask)))
 #define MMIO_FORCE_MODIFY8(addr, mask, val)  MMIO_FORCE_WRITE8 (addr, (MMIO_FORCE_READ8 (addr) & (~mask)) | ((val) & (mask)))
 
-#define MMIO_ALWAYS_FORCE
-
 // instantinate MMIO read
 #ifdef MMIO_ALWAYS_FORCE
 

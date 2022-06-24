@@ -89,6 +89,21 @@ SoundDevice::deviceInfo& SoundDevice::deviceInfo::operator=(const SoundDevice::d
 
 // -------------------------------------------------------
 
+SoundDevice::SoundDevice(const char* _name, uint32_t _infoPrivateBufSize ) :
+    name(_name), currentFormat(SND_FMT_NULL), sampleRate(0),
+    callback(NULL), userdata(NULL), devinfo(_infoPrivateBufSize) {
+    memset(&irq,        0, sizeof(irqEntry));
+    memset(&convinfo,   0, sizeof(convinfo));
+    devinfo.clear();
+    isDetected = isPaused = isPlaying = isInitialised = isOpened = false;
+}
+
+SoundDevice::~SoundDevice() {
+    if (isPlaying) stop();
+    if (isOpened) close();
+    if (isInitialised) done();
+};
+
 const char * SoundDevice::getName()
 {
     return name;
@@ -349,6 +364,18 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
     return SND_ERR_UNKNOWN_FORMAT;
 }
 
+// -----------------------------------------------
+// DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
+// -----------------------------------------------
+DmaBufferDevice::DmaBufferDevice(const char* _name, uint32_t _infoPrivateBufSize) :
+    SoundDevice(_name, _infoPrivateBufSize) {
+    dmaChannel = -1;
+    currentPos = irqs = 0;
+    oldTotalPos = renderPos = 0;
+    dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
+    dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL;
+}
+
 uint32_t DmaBufferDevice::prefill() {
     if (isPaused) { resume(); return SND_ERR_RESUMED; }
 
@@ -406,9 +433,6 @@ uint32_t DmaBufferDevice::removeIrq() {
     return SND_ERR_OK;
 }
 
-// -----------------------------------------------
-// DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
-// -----------------------------------------------
 bool DmaBufferDevice::irqCallbackCaller() {
     soundDeviceCallbackResult rtn;
 
@@ -491,6 +515,8 @@ uint32_t DmaBufferDevice::dmaBufferFree() {
 
     return SND_ERR_OK;
 }
+
+
 
 uint64_t IsaDmaDevice::getPos() {
     if (isPlaying) {

@@ -101,6 +101,27 @@ uint32_t honkGetDivisor(uint32_t rate) {
     return udivRound(0x1234DD, rate);
 }
 
+sndNonDmaBase::sndNonDmaBase(const char *name) : DmaBufferDevice(name) {
+    isDetected = isOpened = isIrq0Initialised = isInitialised = isPlaying = isPaused = false;
+    timerDivisor = 0;
+
+    convtab = NULL;
+    irq0struct = NULL; rmCallback.ptr = NULL; patchTable = NULL;
+    irq0structBlock.segment  = irq0structBlock.selector  = NULL;
+    realModeISRBlock.segment = realModeISRBlock.selector = NULL;
+    realModeISREntry = NULL;
+    oldIrq0RealMode.ptr = NULL;
+    oldIrq0ProtectedMode = NULL;
+
+    devinfo.name = getName();
+    devinfo.version = NULL;
+    devinfo.maxBufferSize = 32768;  // BYTES
+    
+    devinfo.caps      = NULL;
+    devinfo.capsLen   = 0;
+    devinfo.flags     = 0;
+}
+
 bool sndNonDmaBase::initIrq0() {
     if (isIrq0Initialised) return true;
 
@@ -323,19 +344,14 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
-    if (isPlaying) stop();
+    if (isOpened) close();
 
     // clear converter info
     memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
-    if (flags & SND_OPEN_NOCONVERT) {
-        // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-
-    }
-    else {
+    if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
 
         // suggest mono if mono only
@@ -348,9 +364,8 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
             newFormat = (devinfo.caps->format & SND_FMT_DEPTH_MASK) | (newFormat & ~SND_FMT_DEPTH_MASK);
 
         newFormat = (devinfo.caps->format & SND_FMT_SIGN_MASK) | (newFormat & ~SND_FMT_SIGN_MASK);
-
-        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
+    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     // pass converter info
 #ifdef DEBUG_LOG
@@ -361,7 +376,6 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     conv->bytesPerSample = getBytesPerSample(newFormat);
 
     // we have all relevant info for opening sound device, do it now
-    if (isOpened) close();
 
     // allocate DMA buffer
     if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
@@ -545,6 +559,9 @@ uint32_t sndNonDmaBase::done() {
 // --------------------------------------
 // (the almighty) PC Honker driver
 
+sndPcSpeaker::sndPcSpeaker() : sndNonDmaBase("PC Speaker") {
+    patchTable = &snddev_irq0_patch_pcspeaker;
+}
 
 uint32_t sndPcSpeaker::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
@@ -610,6 +627,12 @@ bool sndPcSpeaker::doneConversionTab() {
 // --------------------------------------
 // Covox Speech Thing aka LPT DAC, mono
 
+sndCovox::sndCovox(const char* name) : sndNonDmaBase(name) {
+    patchTable = &snddev_irq0_patch_pcspeaker;
+    // scan BIOS data area and fixup BIOS LPT resources
+    scanBDA();
+};
+
 void sndCovox::scanBDA() {
     uint16_t *bdaLpt = (uint16_t*)(0x408);
     for (size_t i = 0; i < 3; i++) {
@@ -652,7 +675,7 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->name          = "Covox LPT DAC";
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
-    // put IO base  address in private buffer
+    // put IO base address in private buffer
     snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X", info->iobase);
     info->version = info->privateBuf;
 
@@ -661,6 +684,11 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
 
 // --------------------------------------
 // Dual Covox aka Dual LPT DAC, stereo
+
+sndDualCovox::sndDualCovox() : sndCovox("Dual Covox LPT DAC") {
+    patchTable = &snddev_irq0_patch_dualcovox;
+    // sndCovox() scans BDA by itself
+};
 
 uint32_t sndDualCovox::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
@@ -710,6 +738,11 @@ uint32_t sndDualCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
 
 // --------------------------------------
 // Stereo-On-1 LPT DAC, stereo :)
+
+sndStereoOn1::sndStereoOn1() : sndCovox("Stereo-On-1 LPT DAC") {
+    patchTable = &snddev_irq0_patch_stereo1;
+    // sndCovox() scans BDA by itself
+};
 
 uint32_t sndStereoOn1::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info

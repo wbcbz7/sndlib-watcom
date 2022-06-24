@@ -96,19 +96,8 @@ public:
     
 public:
     // constructor (nothing fancy here)
-    SoundDevice(const char* _name, uint32_t _infoPrivateBufSize = 64) :
-        name(_name), currentFormat(SND_FMT_NULL), sampleRate(0),
-        callback(NULL), userdata(NULL), devinfo(_infoPrivateBufSize) {
-        memset(&irq,        0, sizeof(irqEntry));
-        memset(&convinfo,   0, sizeof(convinfo));
-        devinfo.clear();
-        isDetected = isPaused = isPlaying = isInitialised = isOpened = false;
-    }
-    virtual ~SoundDevice() {
-        if (isPlaying) stop();
-        if (isOpened) close();
-        if (isInitialised) done();
-    };
+    SoundDevice(const char* _name, uint32_t _infoPrivateBufSize = 64);
+    virtual ~SoundDevice();
     
     // get device name
     virtual const char *getName();
@@ -194,17 +183,10 @@ public:
 
 // -----------------------------------------------
 // DMA-like circular buffer device (both ISA DMA and PCI bus-master devices)
+// -----------------------------------------------
 class DmaBufferDevice : public SoundDevice {
 public:
-    DmaBufferDevice(const char* _name, uint32_t _infoPrivateBufSize = 64) :
-        SoundDevice(_name, _infoPrivateBufSize) {
-        dmaChannel = -1;
-        currentPos = irqs = 0;
-        oldTotalPos = renderPos = 0;
-        dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
-        dmaBlock.ptr = NULL; dmaBlock.dpmi.segment = dmaBlock.dpmi.selector = NULL;
-    }
-    virtual ~DmaBufferDevice() {};
+    DmaBufferDevice(const char* _name, uint32_t _infoPrivateBufSize = 64);
 
 protected:
 
@@ -259,7 +241,6 @@ protected:
 class IsaDmaDevice : public DmaBufferDevice {
 public:
     IsaDmaDevice(const char* _name) : DmaBufferDevice(_name) {}
-    virtual ~IsaDmaDevice() {};
 
     // get playback position in samples
     virtual uint64_t getPos();

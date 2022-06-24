@@ -78,27 +78,7 @@ class sndNonDmaBase : public DmaBufferDevice {
     
 public:
     // constructor (nothing fancy here)
-    sndNonDmaBase(const char *name) : DmaBufferDevice(name) {
-        isDetected = isOpened = isIrq0Initialised = isInitialised = isPlaying = isPaused = false;
-        timerDivisor = 0;
-
-        convtab = NULL;
-        irq0struct = NULL; rmCallback.ptr = NULL; patchTable = NULL;
-        irq0structBlock.segment  = irq0structBlock.selector  = NULL;
-        realModeISRBlock.segment = realModeISRBlock.selector = NULL;
-        realModeISREntry = NULL;
-        oldIrq0RealMode.ptr = NULL;
-        oldIrq0ProtectedMode = NULL;
-
-        devinfo.name = getName();
-        devinfo.version = NULL;
-        devinfo.maxBufferSize = 32768;  // BYTES
-        
-        devinfo.caps      = NULL;
-        devinfo.capsLen   = 0;
-        devinfo.flags     = 0;
-    }
-    virtual ~sndNonDmaBase() {}
+    sndNonDmaBase(const char *name);
     
     /*
     // get device name
@@ -202,10 +182,7 @@ class sndPcSpeaker : public sndNonDmaBase {
     
 public:
     // constructor (nothing fancy here)
-    sndPcSpeaker() : sndNonDmaBase("PC Speaker") {
-        patchTable = &snddev_irq0_patch_pcspeaker;
-    }
-    virtual ~sndPcSpeaker() {};
+    sndPcSpeaker();
     
     /*
     // get device name
@@ -268,12 +245,7 @@ class sndCovox : public sndNonDmaBase {
     
 public:
     // constructor (nothing fancy here)
-    sndCovox(const char* name = "Covox LPT DAC") : sndNonDmaBase(name) {
-        patchTable = &snddev_irq0_patch_pcspeaker;
-        // scan BIOS data area and fixup BIOS LPT resources
-        scanBDA();
-    };
-    virtual ~sndCovox() {};
+    sndCovox(const char* name = "Covox LPT DAC");
     
     /*
     // get device name
@@ -331,11 +303,7 @@ class sndDualCovox : public sndCovox {
     
 public:
     // constructor (nothing fancy here)
-    sndDualCovox() : sndCovox("Dual Covox LPT DAC") {
-        patchTable = &snddev_irq0_patch_dualcovox;
-        // sndCovox() scans BDA by itself
-    };
-    virtual ~sndDualCovox() {};
+    sndDualCovox();
     
     /*
     // get device name
@@ -396,11 +364,7 @@ class sndStereoOn1 : public sndCovox {
     
 public:
     // constructor (nothing fancy here)
-    sndStereoOn1() : sndCovox("Stereo-On-1 LPT DAC") {
-        patchTable = &snddev_irq0_patch_stereo1;
-        // sndCovox() scans BDA by itself
-    };
-    virtual ~sndStereoOn1() {};
+    sndStereoOn1();
     
     /*
     // get device name

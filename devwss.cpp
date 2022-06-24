@@ -164,6 +164,22 @@ void csExtRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
 
 // ----------------------------------------------
 
+sndWindowsSoundSystem::sndWindowsSoundSystem() : IsaDmaDevice("Windows Sound System") {
+    // fill with defaults
+    isGus = is64khz = isVariableSampleRate = isPaused = false;
+    featureLevel = WSS_FEATURE_AD1848;
+    oldId = newId = extId = 0;
+
+    devinfo.name = getName();
+    devinfo.version = NULL;
+    devinfo.maxBufferSize = 32768;  // BYTES
+
+    // inherit caps from SB2.0 non-highspeed (changed at detect)
+    devinfo.caps = NULL;
+    devinfo.capsLen = 0;
+    devinfo.flags = 0;
+}
+
 bool sndWindowsSoundSystem::kickstartProbingPlayback(SoundDevice::deviceInfo *info, uint32_t dmaChannel, ::dmaBlock &block, uint32_t probeLength, bool enableIrq) {
     // ack interrupt
     if (inp(info->iobase + 2) & 1) outp(info->iobase + 2, 0);
@@ -702,25 +718,20 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
-    if (isPlaying) stop();
+    if (isOpened) close();
 
     // clear converter info
     memset(&convinfo, 0, sizeof(convinfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
-    if (flags & SND_OPEN_NOCONVERT) {
-        // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-
-    }
-    else {
+    if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
-            newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | SND_FMT_INT16;
-            if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | SND_FMT_INT16 | SND_FMT_SIGNED;
         }
+        if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
     // pass converter info
@@ -754,11 +765,18 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
 #endif
 
-    isInitialised = true;
+    isOpened = true;
     return SND_ERR_OK;
 }
 
 uint32_t sndWindowsSoundSystem::done() {
+    if (isOpened) close();
+
+    isInitialised = false;
+    return SND_ERR_OK;
+}
+
+uint32_t sndWindowsSoundSystem::close() {
     // stop playback
     if (isPlaying) stop();
 
@@ -775,7 +793,7 @@ uint32_t sndWindowsSoundSystem::done() {
     if (wssReset(&devinfo, isGus) == false) return SND_ERR_NOTFOUND;
 
     // fill with defaults
-    isInitialised = isPlaying = false;
+    isOpened = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
     sampleRate = 0;

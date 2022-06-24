@@ -95,27 +95,7 @@ class sndWindowsSoundSystem : public IsaDmaDevice {
     
 public:
     // constructor (nothing fancy here)
-    sndWindowsSoundSystem() : IsaDmaDevice("Windows Sound System") {
-
-        // fill with defaults
-        isGus = is64khz = isVariableSampleRate = isPaused = false;
-        featureLevel = WSS_FEATURE_AD1848;
-        oldId = newId = extId = 0;
-
-        isVariableAvail = true;
-
-        devinfo.name = getName();
-        devinfo.version = NULL;
-        devinfo.maxBufferSize = 32768;  // BYTES
-
-        // inherit caps from SB2.0 non-highspeed (changed at detect)
-        devinfo.caps = NULL;
-        devinfo.capsLen = 0;
-        devinfo.flags = 0;
-    }
-    virtual ~sndWindowsSoundSystem() {
-
-    }
+    sndWindowsSoundSystem();
 
     // get device name
     // virtual const char    *getName();
@@ -155,15 +135,17 @@ public:
     // stop playback
     virtual uint32_t stop();
 
-    // deinit all this shit
+    // close 
+    virtual uint32_t close();
+
+    // deinit device
     virtual uint32_t done();
 
 protected:
-    // is GUS?
-    bool            isGus;
+    
+    bool            isGus;                      // is GUS?
     bool            is64khz;
     bool            isVariableSampleRate;       // few codecs support this, i.e later Crystal codecs and AMD Interwave
-    bool            isVariableAvail;
 
     uint32_t*       fixedRatesList;
 

@@ -20,11 +20,12 @@ using namespace sndlib;
 
 #define arrayof(x) (sizeof(x) / sizeof(x[0]))
 
-// due to HDA codec "variable" nature, all relevant capability info is readfrom the coded and stored
+// due to HDA codec "variable" nature, all relevant capability info is read from the codec and stored
 // in deviceInfo::privateBuf
 
+// TODO: handle 96/192k
 const uint32_t hdaRates[] = {44100, 48000};
-const uint32_t hdaRates48kOnly[] = {48000};       // todo: are there any codecs suporting solely 48k only?
+const uint32_t hdaRates48kOnly[] = {48000};       // todo: are there any codecs suporting 48k only?
 
 // HDA controller blacklist (to filter out HDMI output codecs and other broken crap)
 static const uint32_t hda_DeivceBlacklist[] = {
@@ -368,7 +369,7 @@ void hda_initPlaybackPath(void * hdaregs, uint32_t codecId, hda_widgetInfo **pat
                 hdaSendVerb(hdaregs, codecIdNodeId, HDA_VERB_SET_CONVERTER_FORMAT + streamFormat);
                 // set stream tag, 0th lowest channel
                 hdaSendVerb(hdaregs, codecIdNodeId, HDA_VERB_SET_CONVERTER_STREAM_CHANNEL + (streamTag << 4));
-                if (path[i]->caps.digital != 0) {
+                if (path[i]->caps.digital) {
                     // enable SPDIF, consumer format, PCM, original
                     hdaSendVerb(hdaregs, codecIdNodeId, HDA_VERB_SET_DIGITAL_CONVERTER_CONTROL + 1);
                 }
@@ -569,6 +570,17 @@ void hda_setupPCI(pciAddress pciaddr) {
 
 // ---------------------------------
 // now for the usual stuff
+
+sndHDAudio::sndHDAudio() : DmaBufferDevice("High Definition Audio", 512) {  // reserve more memory for private buffer
+    hdaStreamFormat.raw = 0;
+    hdaStreamTag = 0;
+    hdaStreamIndex = -1;
+    codecGraph.clear();
+    memset(&pciInfo, 0, sizeof(pciInfo));
+    memset(&bufferDescriptor, 0, sizeof(bufferDescriptor));
+    
+    bufferDescriptor.ptr = NULL; bufferDescriptor.dpmi.segment = bufferDescriptor.dpmi.selector = 0;
+};
 
 uint32_t sndHDAudio::resetCodec(SoundDevice::deviceInfo* info, bool setupPCI) {
     if (info == NULL) return SND_ERR_NULLPTR;
@@ -801,6 +813,7 @@ uint32_t sndHDAudio::done() {
     // unmap device
     if (devinfo.membase != NULL) dpmi_unmapphysical(devinfo.membase); devinfo.membase = NULL;
 
+    isInitialised = false;
     return SND_ERR_OK;
 }
 
@@ -886,22 +899,17 @@ uint32_t sndHDAudio::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferS
     // clear converter info
     memset(conv, 0, sizeof(soundFormatConverterInfo));
 
+    // test for conversion
     soundFormat newFormat = fmt;
-    // check if format is supported
-    if (flags & SND_OPEN_NOCONVERT) {
-        // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-
-    }
-    else {
+   if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) != SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | SND_FMT_INT16 | SND_FMT_SIGNED;
         }
-        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
-
+    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    
     // pass converter info
 #ifdef DEBUG_LOG
     logdebug("src = 0x%x, dst = 0x%x\n", fmt, newFormat);

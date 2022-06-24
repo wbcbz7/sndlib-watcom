@@ -251,6 +251,21 @@ bool sbDspReset(uint32_t base) {
 
 // -------------- devSBBase common stuff -----------------
 
+sndSBBase::sndSBBase(const char *name) : IsaDmaDevice(name) {
+    // fill with defaults
+    isDetected = isInitialised = isPlaying = isPaused = false;
+    currentPos = irqs = 0;
+    oldTotalPos = 0;
+
+    devinfo.name = getName();
+    devinfo.version = NULL;
+    devinfo.maxBufferSize = 32768;  // BYTES
+    
+    devinfo.caps      = NULL;
+    devinfo.capsLen   = 0;
+    devinfo.flags     = 0;
+}
+
 uint32_t sndSBBase::sbDetect(SoundDevice::deviceInfo *info, bool manualDetect) {
     uint32_t sbType, sbDspVersion;
 #ifdef DEBUG_LOG
@@ -488,10 +503,11 @@ uint32_t sndSBBase::init(SoundDevice::deviceInfo* info)
     // disable speaker
     sbDspWrite(this->devinfo.iobase, 0xD3);
     
+    isInitialised = true;
     return SND_ERR_OK;
 }
 
-uint32_t sndSBBase::done() {
+uint32_t sndSBBase::close() {
     // stop playback
     if (isPlaying) stop();
 
@@ -508,7 +524,7 @@ uint32_t sndSBBase::done() {
     if (sbDspReset(devinfo.iobase) == false) return SND_ERR_NOTFOUND;
 
     // fill with defaults
-    isInitialised = isPlaying = false;
+    isOpened = isPlaying = false;
     currentPos = renderPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaCurrentPtr = dmaRenderPtr = 0;
     sampleRate = 0;
@@ -517,9 +533,53 @@ uint32_t sndSBBase::done() {
     return SND_ERR_OK;
 }
 
+uint32_t sndSBBase::done() {
+    if (isOpened) close();
+
+    isInitialised = false;
+    return SND_ERR_OK;
+}
+
 const char* sndSBBase::getName()
 {
     return devinfo.name;
+}
+
+uint32_t sndSBBase::openCommon(uint32_t sampleRate, soundFormat fmt, soundFormat newFormat, uint32_t bufferSize, soundDeviceCallback callback, void* userdata, soundFormatConverterInfo* conv) {
+    uint32_t result = SND_ERR_OK;
+    
+    // pass converter info
+#ifdef DEBUG_LOG
+    printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
+#endif
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
+
+    // we have all relevant info for opening sound device, do it now
+
+    // allocate DMA buffer
+    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
+    
+    // allocate DMA buffer
+    if ((result = installIrq()) != SND_ERR_OK) return result;
+
+    // save callback info
+    this->callback = callback;
+    this->userdata = userdata;
+
+    // pass coverter info
+    memcpy(&convinfo, conv, sizeof(convinfo));
+    
+    this->currentFormat  = newFormat;
+    this->sampleRate     = sampleRate;
+
+    // debug output
+#ifdef DEBUG_LOG
+    fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
+#endif
+    
+    isOpened = true;
+    return SND_ERR_OK;
 }
 
 uint32_t sndSBBase::ioctl(uint32_t function, void* data, uint32_t len)
@@ -528,18 +588,20 @@ uint32_t sndSBBase::ioctl(uint32_t function, void* data, uint32_t len)
     return SND_ERR_UNSUPPORTED;
 }
 
-// ----------- SB 2.0/Pro common stuff -------------------------
+// ----------- SB 1.x/2.x/Pro common stuff -------------------------
+
+sndSoundBlaster2Pro::sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 1.x/2.x/Pro") {}
 
 uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion) {
     // fill info
     info->maxBufferSize = 32768;  // BYTES
+    info->flags         = SND_DEVICE_CLOCKDRIFT;
     switch (sbDspVersion >> 8) {
         case 1: 
             // SB 1.x w/o autoinit
             info->caps      = sb2OldCaps;
             info->capsLen   = arrayof(sb2OldCaps);
             info->name      = "Sound Blaster 1.0";
-            info->flags     = SND_DEVICE_CLOCKDRIFT;
             break;
         case 2:
         case 4: // SB16 doesn't support SBPro stereo mode!            
@@ -548,14 +610,12 @@ uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_
                 info->caps      = sb2OldCaps;
                 info->capsLen   = arrayof(sb2OldCaps);
                 info->name      = "Sound Blaster 2.0 (non-highspeed)";
-                info->flags     = SND_DEVICE_CLOCKDRIFT;
                 
             } else {
                 // new SB 2.0 w/ highspeed mode
                 info->caps      = sb2Caps;
                 info->capsLen   = arrayof(sb2Caps);
                 info->name      = "Sound Blaster 2.0";
-                info->flags     = SND_DEVICE_CLOCKDRIFT;
             }
             break;
             
@@ -563,7 +623,6 @@ uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_
             info->caps      = sbProCaps;
             info->capsLen   = arrayof(sbProCaps);
             info->name      = "Sound Blaster Pro";
-            info->flags     = SND_DEVICE_CLOCKDRIFT;
             break;
             
         /*
@@ -604,7 +663,7 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
     
     // stooop!
-    if (isPlaying) stop();
+    if (isOpened) close();
 
     // clear converter info
     memset(conv, 0, sizeof(soundFormatConverterInfo));
@@ -642,39 +701,8 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
         }
     }
     
-    // pass converter info
-#ifdef DEBUG_LOG
-    printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
-#endif
-    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    conv->bytesPerSample = getBytesPerSample(newFormat);
-
-    // we have all relevant info for opening sound device, do it now
-    done();
-
-    // allocate DMA buffer
-    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
-    
-    // allocate DMA buffer
-    if ((result = installIrq()) != SND_ERR_OK) return result;
-
-    // save callback info
-    this->callback = callback;
-    this->userdata = userdata;
-
-    // pass coverter info
-    memcpy(&convinfo, conv, sizeof(convinfo));
-    
-    this->currentFormat  = newFormat;
-    this->sampleRate     = sampleRate;
-
-    // debug output
-#ifdef DEBUG_LOG
-    fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
-#endif
-    
-    isInitialised = true;
-    return SND_ERR_OK;
+    // pass the rest to common open function
+    return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
 }
 
 uint32_t sndSoundBlaster2Pro::resume() {
@@ -847,7 +875,11 @@ bool sndSoundBlaster2Pro::irqProc() {
 }
 
 // ----------- SB16 common stuff -------------------------
-// SO FUCKING MUCH DUPLICATED CODE
+
+sndSoundBlaster16::sndSoundBlaster16() : sndSBBase("Sound Blaster 16") {
+    // fill with defaults
+    is16Bit = false;
+};
 
 uint32_t sndSoundBlaster16::fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion) {
     // fill info
@@ -885,61 +917,24 @@ uint32_t sndSoundBlaster16::open(uint32_t sampleRate, soundFormat fmt, uint32_t 
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
-    if (isPlaying) stop();
+    if (isOpened) close();
 
     // clear converter info
     memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
-    if (flags & SND_OPEN_NOCONVERT) {
-        // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-
-    }
-    else {
+    if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | SND_FMT_INT16;
-            if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-        } else 
-            if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        }
     }
+    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
-    // pass converter info
-#ifdef DEBUG_LOG
-    printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
-#endif
-    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    conv->bytesPerSample = getBytesPerSample(newFormat);
-
-    // we have all relevant info for opening sound device, do it now
-    done();
-
-    // allocate DMA buffer
-    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
-
-    // allocate DMA buffer
-    if ((result = installIrq()) != SND_ERR_OK) return result;
-
-    // save callback info
-    this->callback = callback;
-    this->userdata = userdata;
-
-    // pass coverter info
-    memcpy(&convinfo, conv, sizeof(convinfo));
-
-    this->currentFormat = newFormat;
-    this->sampleRate = sampleRate;
-
-    // debug output
-#ifdef DEBUG_LOG
-    fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
-#endif
-
-    isInitialised = true;
-    return SND_ERR_OK;
+    // pass the rest to common open function
+    return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
 }
 
 uint32_t sndSoundBlaster16::resume() {
@@ -1079,6 +1074,14 @@ uint32_t sndSoundBlaster16::getStartCommand(soundFormatConverterInfo & conv)
     return (uint16_t)((mode << 8) | cmd);
 }
 
+// --------------------------------------------------
+// ESS AudioDrive driver
+
+sndESSAudioDrive::sndESSAudioDrive() : sndSBBase("ESS AudioDrive") {    
+    demandModeEnable = false;
+    demandModeBurstLength = 4;
+};
+
 uint32_t sndESSAudioDrive::fillDspInfo(SoundDevice::deviceInfo* info, uint32_t sbDspVersion) {
     // fill info
     info->maxBufferSize = 32768;  // BYTES
@@ -1177,60 +1180,24 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
 
     // stooop!
-    if (isPlaying) stop();
+    if (isOpened) close();
 
     // clear converter info
     memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
-    if (flags & SND_OPEN_NOCONVERT) {
-        // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-
-    }
-    else {
+    if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | SND_FMT_INT16;
         }
-        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
+    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
-    // pass converter info
-#ifdef DEBUG_LOG
-    printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
-#endif
-    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    conv->bytesPerSample = getBytesPerSample(newFormat);
-
-    // we have all relevant info for opening sound device, do it now
-    done();
-    
-    // allocate DMA buffer
-    if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
-
-    // install IRQ handler
-    if ((result = installIrq()) != SND_ERR_OK) return result;
-
-    // save callback info
-    this->callback = callback;
-    this->userdata = userdata;
-
-    // pass coverter info
-    memcpy(&convinfo, conv, sizeof(convinfo));
-
-    this->currentFormat = newFormat;
-    this->sampleRate = sampleRate;
-
-    // debug output
-#ifdef DEBUG_LOG
-    fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
-#endif
-
-    isInitialised = true;
-    return SND_ERR_OK;
+    // pass the rest to common open function
+    return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
 }
 
 uint32_t sndESSAudioDrive::resume() {

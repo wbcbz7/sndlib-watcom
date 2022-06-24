@@ -25,17 +25,7 @@ enum {
 // base HDA driver
 class sndHDAudio : public DmaBufferDevice {
 public:
-    sndHDAudio() : DmaBufferDevice("High Definition Audio", 512) {  // reserve more memory for private buffer
-        hdaStreamFormat.raw = 0;
-        hdaStreamTag = 0;
-        hdaStreamIndex = -1;
-        codecGraph.clear();
-        memset(&pciInfo, 0, sizeof(pciInfo));
-        memset(&bufferDescriptor, 0, sizeof(bufferDescriptor));
-        
-        bufferDescriptor.ptr = NULL; bufferDescriptor.dpmi.segment = bufferDescriptor.dpmi.selector = 0;
-    };
-    virtual ~sndHDAudio() {}
+    sndHDAudio();
 
     // ------------- common device methods --------------------------------
     // get device name

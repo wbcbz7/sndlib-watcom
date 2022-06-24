@@ -2,7 +2,7 @@
 
 // --wbcbz7 oloz7e5
 
-// Sound Blaster 2.0/Pro/16 and ESS AudioDrive driver
+// Sound Blaster 1.x/2.x/Pro/16 and ESS AudioDrive driver
 
 #include <stdint.h>
 #include "snddev.h"
@@ -18,24 +18,7 @@
 class sndSBBase : public IsaDmaDevice {
 public:
     // constructor (nothing fancy here)
-    sndSBBase(const char *name) : IsaDmaDevice(name) {
-        // fill with defaults
-        isDetected = isInitialised = isPlaying = isPaused = false;
-        currentPos = irqs = 0;
-        oldTotalPos = 0;
-
-        devinfo.name = getName();
-        devinfo.version = NULL;
-        devinfo.maxBufferSize = 32768;  // BYTES
-        
-        // inherit caps from SB2.0 non-highspeed (changed at detect)
-        devinfo.caps      = NULL;
-        devinfo.capsLen   = 0;
-        devinfo.flags     = 0;
-    }
-    virtual ~sndSBBase() {
-
-    }
+    sndSBBase(const char *name);
     
     // get device name
     virtual const char *getName();
@@ -76,7 +59,7 @@ public:
     //virtual uint32_t stop();
     
     // close playback
-    //virtual uint32_t close();
+    virtual uint32_t close();
 
     // deinit device
     virtual uint32_t done();
@@ -84,19 +67,22 @@ public:
 protected:
 
     // DSP version
-    uint32_t        dspVersion;
+    uint32_t            dspVersion;
+
+    // SB base common open functions
+    uint32_t            openCommon(uint32_t sampleRate, soundFormat fmt, soundFormat newFormat, uint32_t bufferSize, soundDeviceCallback callback, void* userdata, soundFormatConverterInfo* conv);
     
     // detect SB presence, fill deviceInfo, returns dsp version
-    uint32_t         sbDetect(SoundDevice::deviceInfo *info, bool manualDetect = false);
+    uint32_t            sbDetect(SoundDevice::deviceInfo *info, bool manualDetect = false);
     
     // detect and init extended features (SB16?/ESS)
-    virtual uint32_t detectExt(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);
+    virtual uint32_t    detectExt(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);
 
     // get IRQ/DMA configuration
-    virtual uint32_t fillIrqDma(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);
+    virtual uint32_t    fillIrqDma(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);
 
     // fill info according to DSP version
-    virtual uint32_t fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion);
+    virtual uint32_t    fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion);
     
     // convert DSP version to string
     virtual const char* dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
@@ -110,14 +96,12 @@ protected:
 
 };
 
-// SB 2.0/Pro driver
+// SB 1.x/2.x/Pro driver
 class sndSoundBlaster2Pro : public sndSBBase {
 
 public:
     // constructor (nothing fancy here)
-    sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 2.0/Pro") {
-    }
-    virtual ~sndSoundBlaster2Pro() {}
+    sndSoundBlaster2Pro();
     
     // get device name
     //virtual const char *getName();
@@ -157,7 +141,7 @@ public:
     // stop playback
     virtual uint32_t stop();
     
-    // deinit all this shit
+    // deinit device
     //virtual uint32_t done();
     
 private:
@@ -182,13 +166,7 @@ class sndSoundBlaster16 : public sndSBBase {
     
 public:
     // constructor (nothing fancy here)
-    sndSoundBlaster16() : sndSBBase("Sound Blaster 16") {
-        devinfo.clear();
-
-        // fill with defaults
-        is16Bit = false;
-    };
-    virtual ~sndSoundBlaster16() {}
+    sndSoundBlaster16();
     
     // get device name
     //virtual const char *getName();
@@ -255,16 +233,7 @@ class sndESSAudioDrive : public sndSBBase {
 
 public:
     // constructor (nothing fancy here)
-    sndESSAudioDrive() : sndSBBase("ESS AudioDrive") {
-        devinfo.clear();
-
-        // fill with defaults
-        is16Bit  = false;
-        
-        demandModeEnable = false;
-        demandModeBurstLength = 4;
-    };
-    virtual ~sndESSAudioDrive() {}
+    sndESSAudioDrive();
 
     // get device name
     //virtual const char* getName();
@@ -306,7 +275,6 @@ public:
 
 private:
 
-    bool            is16Bit;
     uint32_t        modelId;            // read by DSP command 0xE7
     uint32_t        modelNumber;        // e.g 688/1868/1869
 

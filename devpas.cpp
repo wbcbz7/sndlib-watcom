@@ -25,6 +25,48 @@ const uint32_t pas16Dma[]   = { 0, 1, 3, 5, 6, 7 };
 
 const uint32_t pasRates[]   = { 4000, 48000 };                  // officialll up to 44100hz, but i think 48k is doable as well
 
+// register definition
+enum {
+    PAS_REG_AUDIOMIXR    =    0x0B88 - 0x388,        // Audio Mixer Control Register
+    PAS_REG_AUDIOFILT    =    0x0B8A - 0x388,        // Audio Filter Control Register
+    PAS_REG_INTRCTLRST   =    0x0B89 - 0x388,        // Interrupt Control Status Register
+    PAS_REG_INTRCTLR     =    0x0B8B - 0x388,        // Interrupt Control Register write
+    PAS_REG_INTRCTLRRB   =    0x0B8B - 0x388,        // Interrupt Control Register read back
+    PAS_REG_PCMDATA      =    0x0F88 - 0x388,        // PCM data I/O register (low byte)
+    PAS_REG_PCMDATAH     =    0x0F89 - 0x388,        // PCM data I/O register (high byte)
+    PAS_REG_CROSSCHANNEL =    0x0F8A - 0x388,        // Cross Channel Register
+    PAS_REG_SAMPLERATE   =    0x1388 - 0x388,        // (t0) Sample Rate Timer Register
+    PAS_REG_SAMPLECNT    =    0x1389 - 0x388,        // (t1) Sample Count Register
+    PAS_REG_SPKRTMR      =    0x138A - 0x388,        // (t2) Local Speaker Timer Address
+    PAS_REG_TMRCTLR      =    0x138B - 0x388,        // Local Timer Control Register
+
+    // hardware specific equates for the MV101 (digital ASIC)
+
+    PAS_REG_MASTERADDRP  =    0x9a01 - 0x388,        // Master Address Pointer      (w)
+    PAS_REG_MASTERCHIPR  =    0xff88 - 0x388,        // Master Chip Rev             (r)
+    PAS_REG_SLAVECHIPR   =    0xef88 - 0x388,        // Slave Chip Rev              (r)
+    PAS_REG_SYSCONFIG1   =    0x8388 - 0x388,        // System Config 1           (r/w)
+    PAS_REG_SYSCONFIG2   =    0x8389 - 0x388,        // System Config 2           (r/w)
+    PAS_REG_SYSCONFIG3   =    0x838a - 0x388,        // System Config 3           (r/w)
+    PAS_REG_SYSCONFIG4   =    0x838b - 0x388,        // System Config 4           (r/w)
+    PAS_REG_IOCONFIG1    =    0xf388 - 0x388,        // I/O Config 1              (r/w)
+    PAS_REG_IOCONFIG2    =    0xf389 - 0x388,        // I/O Config 2              (r/w)
+    PAS_REG_IOCONFIG3    =    0xf38a - 0x388,        // I/O Config 3              (r/w)
+    PAS_REG_IOCONFIG4    =    0xf38b - 0x388,        // I/O Config 4              (r/w)
+    PAS_REG_COMPATREGE   =    0xf788 - 0x388,        // Compatible Rgister Enable (r/w)
+    PAS_REG_EMULADDRP    =    0xf789 - 0x388,        // Emulation Address Pointer (r/w)
+    PAS_REG_WAITSTATE    =    0xbf88 - 0x388,        // Wait State                (r/w)
+    PAS_REG_MASTERMODRD  =    0xff8b - 0x388,        // Master Mode Read            (r)
+    PAS_REG_SLAVEMODRD   =    0xef8b - 0x388,        // Slave Mode Read             (r)
+};
+
+enum {
+    PAS_FEATURELEVEL_ORIGINAL = 0,      // original PAS (8 bit stereo max)
+    PAS_FEATURELEVEL_PLUS     = 1,      // +16bit playback over 8-bit DMA?
+    PAS_FEATURELEVEL_PAS16    = 2,      // +16bit playback over 8/16-bit DMA
+};
+
+
 // PAS/PAS Plus resources
 const soundResourceInfo pasRes[] = {
     {
@@ -151,6 +193,23 @@ uint16_t getMvIrqDma();
 
 
 // ----------------------------------------------
+
+sndProAudioSpectrum::sndProAudioSpectrum() : IsaDmaDevice("Pro Audio Spectrum") {
+    memset(&localShadow, 0, sizeof(localShadow));
+    shadowPtr = &localShadow;
+
+    featureLevel = PAS_FEATURELEVEL_ORIGINAL;
+    isMvSoundPresent = false;
+    
+    devinfo.name = getName();
+    devinfo.version = NULL;
+    devinfo.maxBufferSize = 32768;  // BYTES
+
+    // inherit caps from SB2.0 non-highspeed (changed at detect)
+    devinfo.caps = NULL;
+    devinfo.capsLen = 0;
+    devinfo.flags = 0;
+}
 
 bool sndProAudioSpectrum::pasDetect(SoundDevice::deviceInfo* info, bool manualDetect)
 {
@@ -323,8 +382,6 @@ uint32_t sndProAudioSpectrum::init(SoundDevice::deviceInfo* info)
     return SND_ERR_OK;
 }
 
-// СЛОМАНО!!!!!! смешаны convinfo и conv, блобимся в космос и сосем
-
 uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
     uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
@@ -337,21 +394,15 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
 
     soundFormat newFormat = fmt;
     // check if format is supported
-    if (flags & SND_OPEN_NOCONVERT) {
-        // no conversion if performed
-        if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-
-    }
-    else {
+    if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
-        uint32_t maxFormat = (featureLevel == PAS_FEATURELEVEL_ORIGINAL ? SND_FMT_INT8 : SND_FMT_INT16);
+        uint32_t maxFormat = (featureLevel == PAS_FEATURELEVEL_ORIGINAL ? SND_FMT_INT8 | SND_FMT_UNSIGNED : SND_FMT_INT16 | SND_FMT_SIGNED);
         if ((fmt & SND_FMT_DEPTH_MASK) > maxFormat) {
-            newFormat = (fmt & (SND_FMT_CHANNELS_MASK | SND_FMT_SIGN_MASK)) | maxFormat;
-            if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-        } else 
-            if (isFormatSupported(sampleRate, fmt, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+            newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | maxFormat;
+        }
     }
+    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     // pass converter info
 #ifdef DEBUG_LOG
