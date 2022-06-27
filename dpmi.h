@@ -8,6 +8,7 @@
 // by wbc\\bz7 zo.oz.zolb
 
 // define _DPMI_DJGPP_COMPATIBILITY for adding DJGPP compatibility functions
+// define _DPMI_VENDOR_API          for adding DPMI vendoe API functions
 
 #ifdef __cplusplus
 extern "C" {
@@ -79,10 +80,10 @@ typedef struct {
 } _dpmi_extender_info;
 
 enum {
-        DPMI_SYSTEM_RAW = 0,
-        DPMI_SYSTEM_XMS,
-        DPMI_SYSTEM_VCPI,
-        DPMI_SYSTEM_DPMI,
+    DPMI_SYSTEM_RAW = 0,
+    DPMI_SYSTEM_XMS,
+    DPMI_SYSTEM_VCPI,
+    DPMI_SYSTEM_DPMI,
 };
 
 typedef struct {
@@ -191,7 +192,7 @@ void rmintr(int intnum, union REGPACK *r);
 extern unsigned int dpmi_status;
 extern unsigned int dpmi_returncode;
 
-// dos32a stuff
+#ifdef _DPMI_VENDOR_API
 
 typedef struct {
     void _far       *gdt;
@@ -228,7 +229,7 @@ void dos32a_get_gdt_idt(void _far (*apientry)(), _dos32a_gdt_idt_info *p);
 void dos32a_get_kernel_selectors(void _far (*apientry)(), _dos32a_kernel_selectors *p);
 _dos32a_performance_counters _far *dos32a_get_performance_counters(void _far (*apientry)());
 
-
+#endif
 
 #ifdef _DPMI_DJGPP_COMPATIBILITY
 

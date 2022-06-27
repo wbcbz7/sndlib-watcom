@@ -7,8 +7,8 @@
 #endif
 
 /*
-   some useful DPMI functions
-   by wbcbz7 zo.oz.zolb - l5.ll.zozl
+    some useful DPMI functions
+    by wbcbz7 zo.oz.zolb - l5.ll.zozl
 
     this mostly covers frequently used DPMI 0.9 calls (+ some 1.0), and some DOS extender vendor extensions
     it was never meant to be a complete DPMI adapter, so if you have something missing here, feel free to
@@ -1983,6 +1983,8 @@ void rmintr(int intnum, union REGPACK *r) {
     memcpy(r, &regs, sizeof(union REGPACK));
 }
 
+#ifdef _DPMI_VENDOR_API
+
 /*
     danger zone
 */
@@ -2207,6 +2209,7 @@ _dos32a_performance_counters _far *dos32a_get_performance_counters(void _far (*a
     return (_dos32a_performance_counters _far *)MK_FP(sel, ofs);
 }
 
+#endif
 
 // DJGPP compatibility stuff
 #ifdef _DPMI_DJGPP_COMPATIBILITY
