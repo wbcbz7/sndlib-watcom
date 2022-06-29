@@ -8,10 +8,10 @@
 #include "sndmisc.h"
 #include "snderror.h"
 #include "devwss.h"
-#include "logerror.h"
 
 //define to enable logging
 //#define DEBUG_LOG
+#include "logerror.h"
 
 #define arrayof(x) (sizeof(x) / sizeof(x[0]))
 
@@ -110,23 +110,31 @@ const soundFormatCapability wssVarCaps[] = {
 // ---------------------------------------------
 // WSS helper routines
 
-#ifdef DEBUG_LOG
-inline void wssRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
+#if 0
+
+void cdecl wssRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
     outp(base, reg); outp(base + 1, data);
+#ifdef DEBUG_LOG
     logdebug("wss write Rx%02X = %02X\n", reg, data);
+#endif
 }
 
-inline uint8_t wssRegRead(uint32_t base, uint8_t reg) {
+uint8_t cdecl wssRegRead(uint32_t base, uint8_t reg) {
     outp(base, reg); uint8_t data = inp(base + 1);
+#ifdef DEBUG_LOG
     logdebug("wss read Rx%02X = %02X\n", reg, data);
+#endif
     return data;
 }
 
-inline uint8_t wssStatus(uint32_t base) {
+uint8_t cdecl wssStatus(uint32_t base) {
     uint8_t data = inp(base + 2);
+#ifdef DEBUG_LOG
     logdebug("wss status =  %02X\n", data);
+#endif
     return data;
 }
+
 #else
 // TODO: do WSS codecs work fine with OUT DX, AX? technically they should, as data bus width is 8 bit and
 //       ISA host controller would split word transfer by two adjacent byte transfers
@@ -134,10 +142,10 @@ inline void wssRegWrite(uint32_t base, uint8_t reg, uint8_t data);
 #pragma aux wssRegWrite = "out dx, ax" parm [edx] [al] [ah]
 
 inline uint8_t wssRegRead(uint32_t base, uint8_t reg);
-#pragma aux wssRegRead = "out dx, al" "inc edx" "in al, dx" parm [edx] [al] [ah] value [al] modify [edx eax]
+#pragma aux wssRegRead = "out dx, al" "inc edx" "in al, dx" parm [edx] [al] value [al] modify [edx eax]
 
 inline uint8_t wssStatus(uint32_t base);
-#pragma aux wssStatus = "add edx, 2" "in al, dx" parm [edx] [al] [ah] value [al] modify [edx eax]
+#pragma aux wssStatus = "add edx, 2" "in al, dx" parm [edx] value [al] modify [edx eax]
 
 #endif
 
@@ -173,11 +181,6 @@ sndWindowsSoundSystem::sndWindowsSoundSystem() : IsaDmaDevice("Windows Sound Sys
     devinfo.name = getName();
     devinfo.version = NULL;
     devinfo.maxBufferSize = 32768;  // BYTES
-
-    // inherit caps from SB2.0 non-highspeed (changed at detect)
-    devinfo.caps = NULL;
-    devinfo.capsLen = 0;
-    devinfo.flags = 0;
 }
 
 bool sndWindowsSoundSystem::kickstartProbingPlayback(SoundDevice::deviceInfo *info, uint32_t dmaChannel, ::dmaBlock &block, uint32_t probeLength, bool enableIrq) {
@@ -203,7 +206,7 @@ bool sndWindowsSoundSystem::kickstartProbingPlayback(SoundDevice::deviceInfo *in
 
 bool sndWindowsSoundSystem::readEnvironment(SoundDevice::deviceInfo *info) {
     SoundDevice::deviceInfo gusinfo;
-    char envstr[32] = { 0 };
+    char envstr[64] = { 0 };
 
     // check for ULTRA16 variable
     // ULTRA16=iobase,dma,irq,1,0
@@ -314,8 +317,10 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
     logdebug("ok\n");
 #endif
 
-    // init rates list - use 48khz lmited for detect purpose
-    fixedRatesList = (uint32_t*)wssRates;
+    // init format caps for regular WSS (48khz max)
+    info->caps = wssCaps;
+    info->capsLen = arrayof(wssCaps);
+    info->flags = 0;
 
     // probe DMA
     ::dmaBlock testblk;
@@ -364,8 +369,11 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 
 
 #ifdef DEBUG_LOG
-    logdebug("wss status = %02X", inp(info->iobase + 2));
+    logdebug("wss status = %02X\n", inp(info->iobase + 2));
 #endif
+
+    // acknowledge interrupt
+    if (inp(info->iobase + 2) & 1) outp(info->iobase + 2, 0);
 
     // check if IRQ has been found
     if (info->irq == -1) if (manualDetect == false) return false; else {
@@ -380,9 +388,6 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 #ifdef DEBUG_LOG
             logdebug("probe irq %d...\n", *irq);
 #endif
-#ifdef DEBUG_LOG
-            logdebug("wss status = %02X", inp(info->iobase + 2));
-#endif
             // hook
             if (irqHook(*irq, &irqstuff, true)) continue;
 
@@ -390,7 +395,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
             snd_IrqDetectInfo.found = false;
 
             // setup codec for playback
-            kickstartProbingPlayback(info, info->dma, testblk, probeIrqLength, false);
+            kickstartProbingPlayback(info, info->dma, testblk, probeIrqLength, true);
 
             uint32_t timeout = 0x1000;
             while (--timeout) {
@@ -420,7 +425,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
     dmaFree(&testblk);
 
 #ifdef DEBUG_LOG
-    logdebug("wss status = %02X", inp(info->iobase + 2));
+    logdebug("wss status = %02X\n", inp(info->iobase + 2));
 #endif
 
     if (info->irq == -1) return false;
@@ -678,6 +683,7 @@ uint32_t sndWindowsSoundSystem::detect(SoundDevice::deviceInfo* info) {
 
     // clear and fill device info
     this->devinfo.clear();
+
     if (wssDetect(&this->devinfo, true) == false) return SND_ERR_NOTFOUND;
 
     // fill codec version
@@ -710,6 +716,7 @@ uint32_t sndWindowsSoundSystem::init(SoundDevice::deviceInfo* info)
     // reset codec
     if (wssReset(&this->devinfo, isGus) == false) return SND_ERR_NOTFOUND;
 
+    isInitialised = true;
     return SND_ERR_OK;
 }
 
@@ -721,7 +728,7 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     if (isOpened) close();
 
     // clear converter info
-    memset(&convinfo, 0, sizeof(convinfo));
+    memset(conv, 0, sizeof(soundFormatConverterInfo));
 
     soundFormat newFormat = fmt;
     // check if format is supported
@@ -731,18 +738,17 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | SND_FMT_INT16 | SND_FMT_SIGNED;
         }
-        if (isFormatSupported(sampleRate, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
     // pass converter info
 #ifdef DEBUG_LOG
     logdebug("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
 #endif
-    if (getConverter(fmt, newFormat, &convinfo) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    convinfo.bytesPerSample = getBytesPerSample(newFormat);
+    if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    conv->bytesPerSample = getBytesPerSample(newFormat);
 
     // we have all relevant info for opening sound device, do it now
-    done();
 
     // allocate DMA buffer
     if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
@@ -755,7 +761,7 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
     this->userdata = userdata;
 
     // pass coverter info
-    memcpy(conv, &convinfo, sizeof(convinfo));
+    memcpy(&convinfo, conv, sizeof(convinfo));
 
     this->currentFormat = newFormat;
     this->sampleRate = sampleRate;

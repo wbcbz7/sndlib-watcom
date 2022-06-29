@@ -147,8 +147,6 @@ protected:
     bool            is64khz;
     bool            isVariableSampleRate;       // few codecs support this, i.e later Crystal codecs and AMD Interwave
 
-    uint32_t*       fixedRatesList;
-
     // detect WSS presence, fill deviceInfo, returns 1 if success
     bool            wssDetect(SoundDevice::deviceInfo* info, bool manualDetect = false);
 
