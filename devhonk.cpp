@@ -644,8 +644,6 @@ uint32_t sndCovox::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();
 
-    if (info == NULL) return 0;
-
     // not a user-supplied info
     if (devinfo.iobase == -1) {
         // use data from BDA, scan backwards (so user can add own custom ports)
@@ -693,8 +691,6 @@ sndDualCovox::sndDualCovox() : sndCovox("Dual Covox LPT DAC") {
 uint32_t sndDualCovox::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();
-
-    if (info == NULL) return 0;
 
     // not a user-supplied info
     if (devinfo.iobase == -1) {
@@ -747,8 +743,6 @@ sndStereoOn1::sndStereoOn1() : sndCovox("Stereo-On-1 LPT DAC") {
 uint32_t sndStereoOn1::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();
-
-    if (info == NULL) return 0;
 
     // not a user-supplied info
     if (devinfo.iobase == -1) {
