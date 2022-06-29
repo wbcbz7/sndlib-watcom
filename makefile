@@ -19,7 +19,7 @@ CFLAGS   = -5r -fp5 -fpi87 -zp16 -onhasbmi -s -zv -d$(DLEVEL) -d_$(SYSDEF) -i=$(
 LFLAGS   =
 
 # add object files here
-OBJS     = convert.obj dma.obj dpmi.obj tinypci.obj irq.obj logerror.obj sndmisc.obj
+OBJS     = sndlib.obj convert.obj dma.obj dpmi.obj tinypci.obj irq.obj logerror.obj sndmisc.obj
 OBJS     = $(OBJS) snddev.obj devsb.obj devwss.obj devpas.obj devhda.obj devhonk.obj devhonka.obj
 
 OBJLIST  = $(OBJS)

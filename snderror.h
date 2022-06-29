@@ -1,3 +1,5 @@
+#pragma once 
+
 enum {
     SND_ERR_OK = 0,
     SND_ERR_UNSUPPORTED,
@@ -10,7 +12,8 @@ enum {
     SND_ERR_DMA,
     SND_ERR_NO_DATA,
     SND_ERR_UNINITIALIZED,
-    SND_ERR_RESUMED,
+    SND_ERR_RESUMED,            // for SoundDevide::start() if playback is paused, not an error!
+    SND_ERR_USEREXIT,           // for sndlibCreateDevice()
     
     
     // ...more in future :)

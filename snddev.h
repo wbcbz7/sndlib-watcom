@@ -105,6 +105,9 @@ public:
     // detect (0 if found + if (res != NULL) *res filled with current config)
     virtual uint32_t detect(SoundDevice::deviceInfo *info = NULL);
     
+    // get device information, NULL on error
+    virtual const SoundDevice::deviceInfo* getDeviceInfo();
+
     // select and init (use supplied *res info if (res != NULL))
     virtual uint32_t init(SoundDevice::deviceInfo *info = NULL);
     
@@ -234,7 +237,7 @@ protected:
 // ISA DMA device
 class IsaDmaDevice : public DmaBufferDevice {
 public:
-    IsaDmaDevice(const char* _name) : DmaBufferDevice(_name) {}
+    IsaDmaDevice(const char* _name);
 
     // get playback position in samples
     virtual uint64_t getPos();

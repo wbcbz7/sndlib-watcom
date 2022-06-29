@@ -93,6 +93,10 @@ const uint32_t SoundDevice::getCaps(const soundFormatCapability* info)
     return devinfo.capsLen;
 }
 
+const SoundDevice::deviceInfo* SoundDevice::getDeviceInfo() {
+    return &devinfo;
+}
+
 uint32_t SoundDevice::detect(SoundDevice::deviceInfo * info)
 {
     return SND_ERR_UNSUPPORTED;
@@ -492,7 +496,7 @@ uint32_t DmaBufferDevice::dmaBufferFree() {
     return SND_ERR_OK;
 }
 
-
+IsaDmaDevice::IsaDmaDevice(const char* _name) : DmaBufferDevice(_name) {}
 
 uint64_t IsaDmaDevice::getPos() {
     if (isPlaying) {
