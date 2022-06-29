@@ -18,8 +18,8 @@ totally work in progress
 
 implemented by reprogramming IRQ0 at sample rate, then installing custom bi-modal (separate real and protected mode) handler to push raw PCM samples to sound device at the sample rate.
 
-- pros: no ISA DMA mess, available on almost every PC (even modern one)
-- cons: terrible sound quality (IRQ0 jitter, low bit depth, generally mono only)
+- pros: no ISA DMA/bus mastering mess, available on almost every PC (even modern one)
+- cons: questionable sound quality (IRQ0 jitter, low bit depth, generally mono only)
 
 ### 1. PC Speaker (PWM aka RealSound)
 
@@ -31,7 +31,7 @@ implemented by reprogramming IRQ0 at sample rate, then installing custom bi-moda
 
 * **HW resources:** i8254 timer 2 in mode 0 (interrupt on terminal count) + port 0x61 for speaker control
 
-  extremely prone to IRQ0 jitter/latency, any CPU mode switches during DOS/BIOS calls obviously result in occasional crackling and whining, giving a scratched vinyl record-like appearance. someone can find that aesthetic, but most of you would quicky dump it for a better sound device :)
+  extremely prone to IRQ0 jitter/latency, any CPU mode switches during DOS/BIOS calls obviously result in occasional crackling and whining, giving a scratched vinyl record-like appearance. someone can find that aesthetic, but most of you would quickly dump it for a better sound device :)
 
   although timer values written to the i8254 are 8-bit, they need to be rescaled by the conversion table depending on the stream sample rate; created upon `open()`, and passed to conversion routine as `parm2`
 
@@ -45,7 +45,7 @@ implemented by reprogramming IRQ0 at sample rate, then installing custom bi-moda
 
 - **HW resources:** one 8-bit I/O port, scanned from BIOS Data Area LPT1/2/3
 
-  the definite sound device choice back in the late80s/early90s for those who weren't able to afford a soundcard but have a dozen of resistors, soldering equipment and a bit of free time :) advanced variants include discrete DACs in place of R-2R ladder, stereo capability, audio sampling, etc...
+  the definite sound device choice back in the late-80s/early-90s for those who weren't able to afford a soundcard but have a dozen of resistors, soldering equipment and a bit of free time :) advanced variants include discrete DACs in place of R-2R ladder, stereo capability, audio sampling, etc...
 
   sounds considerably better that PC Speaker (one might note it even performs better than early SB cards!), less prone to IRQ0 jitter; decent choice for laptops
 
@@ -156,7 +156,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
 - **HW resources:** one I/O range, one IRQ, one DMA channel
 
-  an alternative PCM audio standard based on AD1848/CS4231 codec, supported by ISA chips from Crystal, Yamaha, OPTi and several other vendors; Gravis Ultrasound MAX and Interwave (GUS PnP, etc) cards also include WSS-compatible codec at non-standard IO base, albeit support is **UNTESTED!**.
+  an alternative PCM audio standard based on AD1848/CS4231 codec, supported by ISA chips from Crystal, Yamaha, OPTi and several other vendors; Gravis Ultrasound MAX and AMD Interwave (GUS PnP, etc) cards also include WSS-compatible codec at non-standard IO base, albeit support is **UNTESTED!**.
 
   `detect()` works as following:
 
@@ -200,7 +200,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
   **absolutely untested**, implemented by careful(-less) documentation/source reading :)
 
-  `detect()` first probes common PAS IO ranges, then, if IRQ/DMA are unknown, calls MVSOUND.SYS driver to get IRQ/DMA settings. if MVSOUND.SYS is not present, you MUST pass valid IRQ/DMA settings in `deviceInfo` structure, or else device initilaization will fail.
+  `detect()` first probes common PAS IO ranges, then, if IRQ/DMA are unknown, calls MVSOUND.SYS driver to get IRQ/DMA settings. if MVSOUND.SYS is not loaded, you MUST pass valid IRQ/DMA settings in `deviceInfo` structure, or else device initialization will fail.
 
 ### ...future plans
 
@@ -211,11 +211,11 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
 most PCI devices uses PCI Bus Master for playing back/recording audio from the system memory, which, in case of DOS, complicates things a bit. 
 
-First, if paging is enabled (VCPI/DPMI hosts are known for this), then physical addresses are no longer correspond to linear ones. ISA drivers rely on transparent handling of ISA DMA controller registers (which trigger virtual memory manager' automatic memory remapping), but as we are talking directly with the PCI device, this hook won't work. Moreover, DPMI doesn't support reverse memory mapping functions (mapping linear memory to one or several physical regions), we have to revert to other APIs like Virtual DMA Services, whose are, alas, doesn't work reliably for extended (>1MB) memory. Another known universal workaround is to allocate XMS memory, lock it and map physical XMS block address to linear via DPMI function 0x800. Alternatively, you can run in raw/XMS environment, with paging disabled and 1:1 address mapping :) 
+First, if paging is enabled (VCPI/DPMI hosts are known for this), then physical addresses are no longer correspond to linear ones. ISA drivers rely on transparent handling of ISA DMA controller registers (which trigger virtual memory manager' automatic memory remapping), but as we are talking directly with the PCI device, this hook will never trigger. Moreover, DPMI doesn't support reverse memory mapping functions (mapping linear memory to one or several physical regions), we have to revert to other APIs like Virtual DMA Services, whose are, alas, doesn't work reliably for extended (>1MB) memory. Another known universal workaround is to allocate XMS memory, lock it and map physical XMS block address to linear via DPMI function 0x800. Alternatively, you can run in raw/XMS environment, with paging disabled and 1:1 address mapping :) 
 
-Since i'm too lazy to work this around, at this moment, PCI device drivers are NOT compatible with paging!
+sndlib workarounds this by allocating sound buffer and necessary descriptors in low memory; in single-tasking systems this seems to work fine.
 
-Second, memory coherency issues are becoming important. PCI systems handle this fine, but  in some environments (like PCIe systems), we have to handle unusual stuff like PCIe traffic classes, snooping, etc. 
+Second, memory coherency issues are becoming important. PCI systems handle this fine, but in some environments (like PCIe systems), we have to handle unusual stuff like PCIe traffic classes, snooping, etc. 
 
 
 
@@ -248,7 +248,7 @@ Second, memory coherency issues are becoming important. PCI systems handle this 
   Currently, this driver has been successfully tested on:
 
   * AMD Ryzen 5 3600 + Realtek ALC892 (ASRock B450M Pro4) - line out and front panel, also note HDA controller integrated on the CPU
-  * Intel Z77 + Realtek ALC892 (ASUS P8Z77-V Pro) - both line out pins and front panel output, optical SPDIF out seems to be activated as well (unable to test it for now)
+  * Intel Z77 + Realtek ALC892 (ASUS P8Z77-V Pro) - both line out and front panel output, SPDIF works
   * Intel Core i5-4200U + Realtek ALCxxx (Acer E1-572G) - line out
   * Intel H61 + Realtek ALC662 (Pegatron IPSMB-VH1) - line out and front panel, SPDIF untested
-  * Intel HM10 + Realtek ALCxxx (Intel D525MW) - line out
+  * Intel HM10 + Realtek ALC662 (Intel D525MW) - line out

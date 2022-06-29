@@ -13,9 +13,10 @@ typedef int __sndconvcall (*soundFormatConverter) (void*, void*, uint32_t, uint3
 struct soundFormatConverterInfo {
     soundFormat             format;
     soundFormatConverter    proc;
-    uint32_t                parm;                    // passed in edx while calling proc
-    uint32_t                parm2;                   // passed in ebx while calling proc
-    uint32_t                bytesPerSample;
+    uint32_t                parm;                   // passed in edx while calling proc
+    uint32_t                parm2;                  // passed in ebx while calling proc
+    uint32_t                bytesPerSample;         // bytes per each sample
+    uint32_t                defaultBufferSamples;   // default buffer size in samples
 };
 
 // callback return codes

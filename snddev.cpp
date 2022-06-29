@@ -8,34 +8,6 @@
 #include "convert.h"
 #include "snderror.h"
 
-// init sound library internal resources
-uint32_t sndlibInit() {
-    // init PM ISR stack
-    snddev_pm_stack_top = &snddev_pm_stack_top;
-
-    // init snddev_pm_old_stack so it doesn't dangle in the void
-    snddev_pm_old_stack = NULL;
-
-    // clear in use flag
-    snddev_pm_stack_in_use = 0;
-
-    // lock memory for stack/RMCB data
-    dpmi_lockmemory(&snddev_bss_lock_start, (&snddev_bss_lock_end - &snddev_bss_lock_start));
-
-    // clear active device storage
-    memset(snd_activeDevice, 0, sizeof(snd_activeDevice));
-
-    return SND_ERR_OK;   
-}
-
-// close sound library and cleanup
-uint32_t sndlibDone() {
-    // unlock memory for stack/RMCB data
-    dpmi_lockmemory(&snddev_bss_lock_start, (&snddev_bss_lock_end - &snddev_bss_lock_start));
-
-    return SND_ERR_OK;   
-}
-
 // ---------------- device info methods -------------------
 SoundDevice::deviceInfo::deviceInfo(uint32_t _privateBufSize) {
     privateBufSize = _privateBufSize;
@@ -433,6 +405,16 @@ uint32_t DmaBufferDevice::removeIrq() {
     return SND_ERR_OK;
 }
 
+static void sndlib_swapStacks();
+#pragma aux sndlib_swapStacks = \
+    " mov     word  ptr   [snddev_pm_old_stack + 4], ss   " \
+    " mov     dword ptr   [snddev_pm_old_stack + 0], esp  " \
+    " lss     esp, [snddev_pm_stack_top] "
+
+static void sndlib_restoreStack();
+#pragma aux sndlib_restoreStack = \
+    " lss     esp, [snddev_pm_old_stack] "
+
 bool DmaBufferDevice::irqCallbackCaller() {
     soundDeviceCallbackResult rtn;
 
@@ -440,25 +422,19 @@ bool DmaBufferDevice::irqCallbackCaller() {
     irqs++;
 
     // STACK POPIERDOLOLO
-    if ((snddev_pm_stack_in_use == 0) && (snddev_pm_old_stack == NULL)) {
+    if (snddev_pm_stack_in_use == 0) {
         snddev_pm_stack_in_use++;
         
         // switch stack
-        _asm {
-            mov     word  ptr   [snddev_pm_old_stack + 4], ss
-            mov     dword ptr   [snddev_pm_old_stack + 0], esp
-            lss     esp, [snddev_pm_stack_top]
-        }
+        sndlib_swapStacks();
         
         // call callback
         // fill only previously played block
         rtn = callback((uint8_t*)dmaBlock.ptr + dmaRenderPtr, sampleRate, dmaBufferSamples,
                 &convinfo, renderPos, userdata);
-                
+        
         // switch back
-        _asm {
-            lss     esp, [snddev_pm_old_stack]
-        }
+        sndlib_restoreStack();
 
         snddev_pm_old_stack = NULL;
         snddev_pm_stack_in_use--;

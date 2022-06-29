@@ -12,12 +12,6 @@
 
 #define SNDDEV_IRQ_PER_DEVICE
 
-// init sound library (called before any device using)
-uint32_t sndlibInit();
-
-// done sound library (called at exit)
-uint32_t sndlibDone();
-
 
 // deviceResources::flags
 enum {
