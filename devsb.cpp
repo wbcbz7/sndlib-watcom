@@ -394,7 +394,7 @@ uint32_t sndSBBase::sbDetect(SoundDevice::deviceInfo *info, bool manualDetect) {
                 //info->dma = 1;             // SB 2.0/Pro default
 
                 ::dmaBlock testblk;
-                if (dmaAlloc(probeDataLength, &testblk)) return 0;
+                if (dmaAlloc(probeDataLength, &testblk) == false) return 0;
                 memset(testblk.ptr, 0x80, probeDataLength);
 
                 for (const uint32_t* dma = sbDma; dma < (sbDma + arrayof(sbDma)); dma++) {

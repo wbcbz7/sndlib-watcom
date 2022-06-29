@@ -319,7 +319,7 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 
     // probe DMA
     ::dmaBlock testblk;
-    if (dmaAlloc(probeDataLength, &testblk)) return false;
+    if (dmaAlloc(probeDataLength, &testblk) == false) return false;
     memset(testblk.ptr, 0x80, probeDataLength);
 
     // check if DMA channel has been found
