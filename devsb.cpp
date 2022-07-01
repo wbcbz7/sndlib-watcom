@@ -751,26 +751,29 @@ uint32_t sndSoundBlaster2Pro::start() {
     printf("dma ready\n");
 #endif
 
-    // set stereo mode (sbpro only)
+    // init mixer stereo mode (sbpro only)
     // warning - creative official doc asks you to do 1-byte single cycle transfer (to avoid reversed stereo?) then do actual transfers, we'll omit it now
-    if (currentFormat & SND_FMT_STEREO) {
-        sbMixerWrite(devinfo.iobase, 0xE, sbMixerRead(devinfo.iobase, 0xE) | 0x22); // stereo out + disable lowpass filter
+    if ((dspVersion >> 8) == 0x3) {
+        // disable lowpass filter + optionally do stereo
+        sbMixerWrite(devinfo.iobase, 0xE, 
+            sbMixerRead(devinfo.iobase, 0xE) | 0x20 | ((currentFormat & SND_FMT_STEREO) ? 2 : 0) 
+        ); 
     }
     
-    // select normal or hispeed mode and enable DMA playback
+    // select mode and enable DMA playback
     if (dspVersion >= 0x200) {
         // set block size
         sbDspWrite(devinfo.iobase, 0x48);
         sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) & 0xFF);
         sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) >> 8);
         if ((sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)) > 22222) {
-            playbackType = AutoInit;
+            playbackType = HighSpeed;
             sbDspWrite(devinfo.iobase, 0x90);
 #ifdef DEBUG_LOG
             printf("highspeed mode\n");
 #endif
         } else {
-            playbackType = HighSpeed;
+            playbackType = AutoInit;
             sbDspWrite(devinfo.iobase, 0x1C);
 #ifdef DEBUG_LOG
             printf("normal mode\n");
@@ -841,6 +844,11 @@ uint32_t sndSoundBlaster2Pro::stop() {
         dmaStop(dmaChannel);
     }
     
+    // reset mixer to mono (sbpro only)
+    if ((dspVersion >> 8) == 0x3) {
+        sbMixerWrite(devinfo.iobase, 0xE, sbMixerRead(devinfo.iobase, 0xE) & ~0x02); 
+    }
+
     isPlaying = false;
     
     // clear playing position
