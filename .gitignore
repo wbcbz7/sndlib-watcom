@@ -1,7 +1,12 @@
 # preliminary .gitignore
 
+hdatest/*
+mp2play/*
+waveplay/*
 *.obj
 *.exe
 *.err
 *.lst
 *.map
+*.bak
+*.lib

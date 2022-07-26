@@ -19,7 +19,7 @@ totally work in progress
 implemented by reprogramming IRQ0 at sample rate, then installing custom bi-modal (separate real and protected mode) handler to push raw PCM samples to sound device at the sample rate.
 
 - pros: no ISA DMA/bus mastering mess, available on almost every PC (even modern one)
-- cons: questionable sound quality (IRQ0 jitter, low bit depth, generally mono only)
+- cons: questionable sound quality (IRQ0 jitter, low bit depth, generally mono only), practically doesn't work in multitasking environments (Windows 3.x/9x/NT+ DOS box limits IRQ0 frequency to 1024 Hz, others will probably refuse to work at all)
 
 ### 1. PC Speaker (PWM aka RealSound)
 
@@ -119,6 +119,8 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
   SB 2.x/Pro support auto-init playback via normal (up to 22 kHz mono/11 kHz stereo), or highspeed (anything above) modes. Note that in highspeed mode, `pause()/resume()` will not work reliably, because DSP reset is required to stop playback, and "resume DMA" DSP command seems to be ignored for highspeed modes.
 
   SB 1.x are supported via single-cycle mode, which requires restarting playback every IRQ call, with the audible click between buffers.
+
+  NOTE: SB cards prior to SB16 use very coarse 1 MHz timing reference (originated from i8051 internal timer), divided by "time constant", so sample rates above ~32 kHz mono/16 kHz stereo will sound a bit out of tune (i.e, 22050 Hz is rounded to 22222 Hz, and 44100 Hz would play at 43478 Hz). Currently there is no way to obtain actual sample rate, although I might add it in the future :)
 
   `detect()` first reads settings from BLASTER variable, then:
 

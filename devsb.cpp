@@ -756,7 +756,7 @@ uint32_t sndSoundBlaster2Pro::start() {
     if ((dspVersion >> 8) == 0x3) {
         // disable lowpass filter + optionally do stereo
         sbMixerWrite(devinfo.iobase, 0xE, 
-            sbMixerRead(devinfo.iobase, 0xE) | 0x20 | ((currentFormat & SND_FMT_STEREO) ? 2 : 0) 
+            (sbMixerRead(devinfo.iobase, 0xE) & ~0x22) | ((currentFormat & SND_FMT_STEREO) ? 0x22 : 0x02) 
         ); 
     }
     
