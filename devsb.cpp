@@ -751,6 +751,8 @@ uint32_t sndSoundBlaster2Pro::start() {
     printf("dma ready\n");
 #endif
 
+    printf("%d, %d\n", dmaBufferSize, dmaBlockSize);
+
     // init mixer stereo mode (sbpro only)
     // warning - creative official doc asks you to do 1-byte single cycle transfer (to avoid reversed stereo?) then do actual transfers, we'll omit it now
     if ((dspVersion >> 8) == 0x3) {

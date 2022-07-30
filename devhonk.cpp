@@ -428,6 +428,10 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     return SND_ERR_OK;
 }
 
+uint32_t sndNonDmaBase::getPlayPos() {
+    return irq0struct->bufferpos;
+}
+
 uint64_t sndNonDmaBase::getPos() {
     // read info from irq0 structure
     if (isPlaying) {

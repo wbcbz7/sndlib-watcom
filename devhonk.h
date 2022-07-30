@@ -138,6 +138,9 @@ protected:
     // done IRQ0 stuff
     bool doneIrq0();
 
+    // get play position in DMA buffer in bytes
+    virtual uint32_t    getPlayPos();
+
     // init port for playback
     virtual bool initPort() { return true; }
 

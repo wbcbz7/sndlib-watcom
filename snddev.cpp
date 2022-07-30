@@ -419,6 +419,10 @@ static void sndlib_restoreStack();
 #pragma aux sndlib_restoreStack = \
     " lss     esp, [snddev_pm_old_stack] "
 
+uint32_t DmaBufferDevice::getPlayPos() {
+    return 0;
+}
+
 bool DmaBufferDevice::irqCallbackCaller() {
     soundDeviceCallbackResult rtn;
 
@@ -448,13 +452,20 @@ bool DmaBufferDevice::irqCallbackCaller() {
 };
 
 void DmaBufferDevice::irqAdvancePos() {
-    // adjust dmabuffers
-    dmaCurrentPtr += dmaBufferSize; if (dmaCurrentPtr >= dmaBlockSize) {
-        dmaCurrentPtr = 0;
+    // recalc render ptr 
+    // NOTE - can be optimized if buffer size/count is power of two, but i'm lazy :)
+    uint32_t playPos   = getPlayPos();
+    uint32_t playIdx   = playPos / dmaBufferSize;
+    dmaRenderPtr = (playIdx + 1) * dmaBufferSize;
+    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+
+    renderPos += dmaBufferSamples;
+
+    // adjust dma buffers, handle buffer wraparounds
+    if (playPos < dmaCurrentPtr) {
         currentPos += dmaBlockSamples;
     }
-    dmaRenderPtr += dmaBufferSize; renderPos += dmaBufferSamples;
-    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+    dmaCurrentPtr = playPos;
 }
 
 uint32_t DmaBufferDevice::dmaBufferInit(uint32_t bufferSize, soundFormatConverterInfo *conv) {
@@ -503,12 +514,16 @@ uint64_t IsaDmaDevice::getPos() {
         volatile uint64_t totalPos = 0; uint32_t timeout = 300;
         // quick and dirty rewind bug fix :D
         do {
-            totalPos = currentPos + ((dmaBlockSize - (dmaGetPos(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0))) / convinfo.bytesPerSample);
+            totalPos = currentPos + (getPlayPos() / convinfo.bytesPerSample);
         } while ((totalPos < oldTotalPos) && (--timeout != 0));
         oldTotalPos = totalPos;
         return totalPos;
     }
     else return 0;
+}
+
+uint32_t IsaDmaDevice::getPlayPos() {
+    return (dmaBlockSize - (dmaGetPos(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0)));
 }
 
 // IRQ procedures

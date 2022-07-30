@@ -251,6 +251,6 @@ Second, memory coherency issues are becoming important. PCI systems handle this 
 
   * AMD Ryzen 5 3600 + Realtek ALC892 (ASRock B450M Pro4) - line out and front panel, also note HDA controller integrated on the CPU
   * Intel Z77 + Realtek ALC892 (ASUS P8Z77-V Pro) - both line out and front panel output, SPDIF works
-  * Intel Core i5-4200U + Realtek ALCxxx (Acer E1-572G) - line out
+  * Intel Core i5-4200U + Realtek ALC3225 (Acer E1-572G) - line out
   * Intel H61 + Realtek ALC662 (Pegatron IPSMB-VH1) - line out and front panel, SPDIF untested
   * Intel HM10 + Realtek ALC662 (Intel D525MW) - line out

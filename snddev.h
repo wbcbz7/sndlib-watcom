@@ -229,6 +229,9 @@ protected:
     // advance play/render pointers
     virtual void        irqAdvancePos();
 
+    // get play position in DMA buffer in bytes
+    virtual uint32_t    getPlayPos();
+
     // IRQ->callback caller
     virtual bool        irqCallbackCaller();
 
@@ -243,6 +246,9 @@ public:
     virtual uint64_t getPos();
 
 protected:
+
+    // get play position in DMA buffer in bytes
+    virtual uint32_t    getPlayPos();
 
 };
 

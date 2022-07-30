@@ -112,6 +112,9 @@ protected:
     
     virtual bool    irqProc();
 
+    // get play position in DMA buffer in bytes
+    virtual uint32_t    getPlayPos();
+
     // scan PCI configuration space, find suitable HDA codecs, fill info
     bool hdaDetect(SoundDevice::deviceInfo* info, bool manualDetect);
     
