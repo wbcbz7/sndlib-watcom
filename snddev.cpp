@@ -556,16 +556,16 @@ volatile IrqDetectInfo snd_IrqDetectInfo;
 EXTERN_IRQPROC(3);
 EXTERN_IRQPROC(4);
 EXTERN_IRQPROC(5);
-EXTERN_IRQPROC(6);
+//EXTERN_IRQPROC(6);
 EXTERN_IRQPROC(7);
-EXTERN_IRQPROC(8);
+//EXTERN_IRQPROC(8);
 EXTERN_IRQPROC(9);
 EXTERN_IRQPROC(10);
 EXTERN_IRQPROC(11);
 EXTERN_IRQPROC(12);
-EXTERN_IRQPROC(13);
-EXTERN_IRQPROC(14);
-EXTERN_IRQPROC(15);
+//EXTERN_IRQPROC(13);
+//EXTERN_IRQPROC(14);
+//EXTERN_IRQPROC(15);
 
 #if 0
 void __interrupt __far (*snd_irqProcTable[16])() = {
@@ -577,9 +577,9 @@ void __interrupt __far (*snd_irqProcTable[16])() = {
 #else
 void __interrupt __far (*snd_irqProcTable[16])() = {
     NULL,        NULL,        NULL,        IRQPROC(3),
-    IRQPROC(4),  IRQPROC(5),  IRQPROC(6),  IRQPROC(7),
-    IRQPROC(8),  IRQPROC(9),  IRQPROC(10), IRQPROC(11),
-    IRQPROC(12), IRQPROC(13), IRQPROC(14), IRQPROC(15)
+    IRQPROC(4),  IRQPROC(5),  NULL,        IRQPROC(7),
+    NULL,        IRQPROC(9),  IRQPROC(10), IRQPROC(11),
+    IRQPROC(12), NULL,        NULL,        NULL
 };
 #endif
 

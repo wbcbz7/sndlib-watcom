@@ -523,11 +523,15 @@ snd_irqDispatch_%1_:
         pop         eax
         iret
 %endmacro
-%assign intnum 3
-%rep 16-intnum
-        IRQ_DISPATCH_ENTRY intnum
-        %assign intnum intnum+1
-%endrep
+
+IRQ_DISPATCH_ENTRY 3
+IRQ_DISPATCH_ENTRY 4
+IRQ_DISPATCH_ENTRY 5
+IRQ_DISPATCH_ENTRY 7
+IRQ_DISPATCH_ENTRY 9
+IRQ_DISPATCH_ENTRY 10
+IRQ_DISPATCH_ENTRY 11
+IRQ_DISPATCH_ENTRY 12
 
 ; -----------------------------------
 ; END OF PROTECTED MODE CODE
