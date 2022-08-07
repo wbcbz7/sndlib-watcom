@@ -55,6 +55,7 @@ SoundDevice* sndlibCreateSpecificDevice(uint32_t id) {
 
         // PCI/PCIe bus master devices...
         case SND_CREATE_DEVICE_HDA:         return new sndHDAudio();
+        case SND_CREATE_DEVICE_DS1:         return new sndYamahaDS1();
 
         default:  return NULL;
     }
@@ -100,6 +101,7 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
     // device priority list
     static const uint32_t priorityList[] = {
         SND_CREATE_DEVICE_HDA,
+        SND_CREATE_DEVICE_DS1,
 
         SND_CREATE_DEVICE_SB16,
         SND_CREATE_DEVICE_WSS,

@@ -55,6 +55,7 @@ enum {
     // PCI/PCIe bus master devices...
     SND_CREATE_DEVICE_PCI_FIRST     = 0x1200,
     SND_CREATE_DEVICE_HDA           = SND_CREATE_DEVICE_PCI_FIRST,
+    SND_CREATE_DEVICE_DS1,
     SND_CREATE_DEVICE_PCI_LAST,
 };
 
@@ -64,3 +65,4 @@ enum {
 #include "devpas.h"
 #include "devhonk.h"
 #include "devhda.h"
+#include "devds1.h"
