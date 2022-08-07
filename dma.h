@@ -44,6 +44,7 @@ enum {
 
 // allocate memory for DMA transfers
 bool dmaAlloc(size_t len, dmaBlock *blk);
+bool dmaAllocUnaligned(size_t len, dmaBlock *blk);
 bool dmaFree(dmaBlock *blk);
 
 // setup DMA for transfer and start it

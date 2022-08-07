@@ -17,6 +17,27 @@ dmaPorts dmaPorts[] = {
     { 0xCC, 0xCE, 0x8A, 0xD2, 0xD4, 0xD6, 0xD8, 0 }, // 5
 };
 
+bool dmaAllocUnaligned(size_t len, dmaBlock *blk) {
+    // check block size
+    if ((len == 0) || (len > 65536)) {
+        logerr("length must be nonzero and less than 64k\n");
+        return false;
+    }
+    
+    // allocate block "as-is"
+    _dpmi_ptr dpmi_block;
+    dpmi_getdosmem((len + 15) >> 4, &dpmi_block);
+    if (dpmi_status) {
+        logerr("unable to allocate memory for DMA buffer\n");
+        return false;
+    }
+
+    size_t linaddr = (dpmi_block.segment << 4);
+    blk->ptr = (void*)linaddr;
+    blk->dpmi = dpmi_block;
+    return true;
+}
+
 bool dmaAlloc(size_t len, dmaBlock *blk) {
     // check block size
     if ((len == 0) || (len > 65536)) {
