@@ -1098,14 +1098,15 @@ bool sndHDAudio::irqProc() {
 
 // get play position in DMA buffer in bytes
 uint32_t sndHDAudio::getPlayPos() {
-    return (dmaBlockSize - HDA_STREAM_READ32(devinfo.membase, hdaStreamIndex, HDA_REG_STREAM_LINKPOS));
+    return HDA_STREAM_READ32(devinfo.membase, hdaStreamIndex, HDA_REG_STREAM_LINKPOS);
 }
 
 uint64_t sndHDAudio::getPos() {
     if (isPlaying) {
-        volatile uint64_t totalPos = 0; uint32_t timeout = 300;
+        volatile uint64_t totalPos = 0; uint32_t timeout = 10;
         // quick and dirty rewind bug fix :D
         do {
+            if (timeout != 10) hdaDelay_us(devinfo.membase, 1);
             totalPos = currentPos + (getPlayPos() / convinfo.bytesPerSample);
         } while ((totalPos < oldTotalPos) && (--timeout != 0));
         oldTotalPos = totalPos;
