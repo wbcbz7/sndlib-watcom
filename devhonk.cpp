@@ -65,6 +65,8 @@ const soundFormatCapability honkCaps48k[] = {
         honkRates48k,
     }
 };
+
+// Covox format caps
 const soundFormatCapability covoxCaps[] = {
     {
         (SND_FMT_INT8  | SND_FMT_MONO | SND_FMT_UNSIGNED),
@@ -72,10 +74,16 @@ const soundFormatCapability covoxCaps[] = {
         cvxRates,
     }
 };
-
 const soundFormatCapability covoxStereoCaps[] = {
     {
         (SND_FMT_INT8  | SND_FMT_STEREO | SND_FMT_UNSIGNED),
+        -2,         // variable range
+        cvxRates,
+    }
+};
+const soundFormatCapability stereoOn1Caps[] = {
+    {
+        (SND_FMT_INT8  | SND_FMT_MONO | SND_FMT_STEREO | SND_FMT_UNSIGNED),
         -2,         // variable range
         cvxRates,
     }
@@ -105,6 +113,9 @@ uint32_t udivRound(uint32_t a, uint32_t b);
 uint32_t honkGetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
     return udivRound(0x1234DD, rate);
+}
+uint32_t honkGetActualSampleRate(uint32_t divisor) {
+    return 0x1234DD / divisor;
 }
 
 sndNonDmaBase::sndNonDmaBase(const char *name) : DmaBufferDevice(name) {
@@ -373,13 +384,18 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     }
     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
+    // calculate new sample rate
+    timerDivisor = honkGetDivisor(sampleRate);
+    conv->sourceSampleRate = sampleRate;
+    conv->sampleRate       = honkGetActualSampleRate(timerDivisor); 
+
     // pass converter info
 #ifdef DEBUG_LOG
     printf("devinfo.caps->format = 0x%x, src = 0x%x, dst = 0x%x\n", devinfo.caps->format, fmt, newFormat);
 #endif
 
     if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    conv->bytesPerSample = getBytesPerSample(newFormat);
+    conv->bytesPerSample = getBytesPerSample(conv->format);
 
     // we have all relevant info for opening sound device, do it now
 
@@ -400,9 +416,8 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     snd_activeDevice[0] = this;
 
     // fill conversion table, pass and link it to convinfo
-    timerDivisor = honkGetDivisor(sampleRate);
 #ifdef DEBUG_LOG
-    printf("sample rate = %d hz, timer divisor = %d\n", sampleRate, timerDivisor);
+    printf("sample rate = %d hz, timer divisor = %d\n", conv->sampleRate, timerDivisor);
 #endif
     if (initConversionTab() == false) {
 #ifdef DEBUG_LOG
@@ -421,9 +436,6 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
 
     // pass coverter info
     memcpy(&convinfo, conv, sizeof(convinfo));
-
-    this->currentFormat = newFormat;
-    this->sampleRate = sampleRate;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -550,8 +562,7 @@ uint32_t sndNonDmaBase::close() {
     // fill with defaults
     isOpened = false;
     dmaBlockSize = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = 0;
-    sampleRate = timerDivisor = 0;
-    currentFormat = SND_FMT_NULL;
+    timerDivisor = 0;
 
     return SND_ERR_OK;
 }
@@ -810,7 +821,7 @@ uint32_t sndStereoOn1::fillCodecInfo(SoundDevice::deviceInfo* info) {
 
 bool sndStereoOn1::initPort() {
     // enable both channels if mono
-    if ((currentFormat & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO) 
+    if ((convinfo.format & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO) 
         outp(devinfo.iobase + 2, 3);
 
     return true;

@@ -655,7 +655,7 @@ uint32_t sndWindowsSoundSystem::setFormat(SoundDevice::deviceInfo* info, uint32_
         // find matching sample rate
         size_t rateIdx = 0;
         for (rateIdx = 0; rateIdx < devinfo.caps->ratesLength; rateIdx++) {
-            if (sampleRate == devinfo.caps->rates[rateIdx]) break;
+            if (abs(sampleRate - devinfo.caps->rates[rateIdx]) < (devinfo.caps->rates[rateIdx] >> 8)) break;
         }
         // not found?
         if (rateIdx >= devinfo.caps->ratesLength) SND_ERR_UNSUPPORTED;
@@ -749,6 +749,8 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
         if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
 
+    // calculate new sample rate
+
     // pass converter info
 #ifdef DEBUG_LOG
     logdebug("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
@@ -770,9 +772,6 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
 
     // pass coverter info
     memcpy(&convinfo, conv, sizeof(convinfo));
-
-    this->currentFormat = newFormat;
-    this->sampleRate = sampleRate;
     
     // debug output
 #ifdef DEBUG_LOG
@@ -810,8 +809,6 @@ uint32_t sndWindowsSoundSystem::close() {
     isOpened = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
-    sampleRate = 0;
-    currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
 }
@@ -835,7 +832,7 @@ uint32_t sndWindowsSoundSystem::start() {
     outp(devinfo.iobase + 2, 0);
 
     // set sample rate and format
-    if (setFormat(&devinfo, sampleRate, convinfo.format) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
+    if (setFormat(&devinfo, convinfo.sampleRate, convinfo.format) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     // program DMA controller for transfer
     if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead) == false)

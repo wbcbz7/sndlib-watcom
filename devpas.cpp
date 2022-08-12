@@ -160,6 +160,9 @@ uint32_t pasGetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
     return udivRound(0x1234DD, rate);
 }
+uint32_t pasGetActualSampleRate(uint32_t divisor) {
+    return 0x1234DD / divisor;
+}
 
 uint16_t isMvSoundInstalled();
 #pragma aux isMvSoundInstalled = \
@@ -407,6 +410,12 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
     }
     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
+    // get sample rate
+    conv->sourceSampleRate = sampleRate;
+    uint32_t stereoShift = (newFormat & SND_FMT_STEREO ? 1 : 0);
+    timeConstant     = pasGetDivisor(sampleRate << stereoShift);
+    conv->sampleRate = pasGetActualSampleRate(timeConstant >> timeConstant);
+
     // pass converter info
 #ifdef DEBUG_LOG
     printf("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
@@ -429,9 +438,6 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
 
     // pass coverter info
     memcpy(&convinfo, conv, sizeof(convinfo));
-
-    this->currentFormat = newFormat;
-    this->sampleRate = sampleRate;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -462,8 +468,6 @@ uint32_t sndProAudioSpectrum::done() {
     isInitialised = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
-    sampleRate = 0;
-    currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
 }
@@ -490,11 +494,9 @@ uint32_t sndProAudioSpectrum::start() {
     pasRegWrite(devinfo.iobase, PAS_REG_INTRCTLRST, 0);
 
     // set sample rate and format
-    uint32_t rawRate = sampleRate;
-    if ((convinfo.format & SND_FMT_STEREO) != 0) rawRate <<= 1;
-    shadowPtr->_samplerate = pasGetDivisor(rawRate);
+    shadowPtr->_samplerate = timeConstant;
 #ifdef DEBUG_LOG
-        printf("sample rate = %d, i8253 divisor = %d\n", sampleRate, shadowPtr->_samplerate);
+        printf("sample rate = %d, i8253 divisor = %d\n", convinfo.sampleRate, shadowPtr->_samplerate);
 #endif
 
     // set bit depth mode for PAS+/16

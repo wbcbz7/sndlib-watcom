@@ -222,16 +222,25 @@ uint32_t sbTimeConstantAccurate(uint32_t rate) {
 
     return 256 - tc;
 }
+uint32_t sbGetActualSampleRate(uint32_t tc) {
+    return (1000000 / (256 - tc));
+}
 
 uint32_t essGetDivisor(uint32_t rate) {    
     if (rate < 4000) return 0; 
     return (rate > 22222) ? 256 - udivRound(795500, rate) : 128 - udivRound(397700, rate);
+}
+uint32_t essGetActualSampleRate(uint32_t tc) {
+    return (tc >= 128 ? (795500 / (256 - tc)) : (397700 / (128 - tc)));
 }
 
 // ES1869 only: supports accurate clock rate for 48 kHz
 uint32_t ess1869GetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
     return ((rate % 8000) == 0) ? 256 - udivRound(768000, rate) : 128 - udivRound(793800, rate);
+}
+uint32_t ess1869GetActualSampleRate(uint32_t tc) {
+    return (tc >= 128 ? (768000 / (256 - tc)) : (793800 / (128 - tc)));
 }
 
 bool sbDspReset(uint32_t base) {
@@ -532,8 +541,6 @@ uint32_t sndSBBase::close() {
     isOpened = isPlaying = false;
     currentPos = renderPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaCurrentPtr = dmaRenderPtr = 0;
-    sampleRate = 0;
-    currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
 }
@@ -574,9 +581,6 @@ uint32_t sndSBBase::openCommon(uint32_t sampleRate, soundFormat fmt, soundFormat
 
     // pass coverter info
     memcpy(&convinfo, conv, sizeof(convinfo));
-    
-    this->currentFormat  = newFormat;
-    this->sampleRate     = sampleRate;
 
     // debug output
 #ifdef DEBUG_LOG
@@ -597,7 +601,9 @@ uint32_t sndSBBase::ioctl(uint32_t function, void* data, uint32_t len)
 
 // ----------- SB 1.x/2.x/Pro common stuff -------------------------
 
-sndSoundBlaster2Pro::sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 1.x/2.x/Pro") {}
+sndSoundBlaster2Pro::sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 1.x/2.x/Pro") {
+    timeConstant = 0;
+}
 
 uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion) {
     // fill info
@@ -708,6 +714,11 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
         }
     }
     
+    // calculate new sample rate
+    uint32_t stereoShift = (newFormat & SND_FMT_STEREO ? 1 : 0);
+    timeConstant     = sbTimeConstantAccurate(sampleRate << stereoShift);
+    conv->sampleRate = sbGetActualSampleRate(timeConstant >> stereoShift);
+
     // pass the rest to common open function
     return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
 }
@@ -749,7 +760,7 @@ uint32_t sndSoundBlaster2Pro::start() {
     
     // set time constant
     sbDspWrite(devinfo.iobase, 0x40);
-    sbDspWrite(devinfo.iobase, sbTimeConstantAccurate(sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)));      // doubled for sbpro stereo
+    sbDspWrite(devinfo.iobase, timeConstant);
     
     // program DMA controller for transfer
     if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead) == false)
@@ -763,7 +774,7 @@ uint32_t sndSoundBlaster2Pro::start() {
     if ((dspVersion >> 8) == 0x3) {
         // disable lowpass filter + optionally do stereo
         sbMixerWrite(devinfo.iobase, 0xE, 
-            (sbMixerRead(devinfo.iobase, 0xE) & ~0x22) | ((currentFormat & SND_FMT_STEREO) ? 0x22 : 0x02) 
+            (sbMixerRead(devinfo.iobase, 0xE) & ~0x22) | ((convinfo.format & SND_FMT_STEREO) ? 0x22 : 0x02) 
         ); 
     }
     
@@ -773,7 +784,7 @@ uint32_t sndSoundBlaster2Pro::start() {
         sbDspWrite(devinfo.iobase, 0x48);
         sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) & 0xFF);
         sbDspWrite(devinfo.iobase, (dmaBufferSize - 1) >> 8);
-        if ((sampleRate << (currentFormat & SND_FMT_STEREO ? 1 : 0)) > 22222) {
+        if ((convinfo.sampleRate << (convinfo.format & SND_FMT_STEREO ? 1 : 0)) > 22222) {
             playbackType = HighSpeed;
             sbDspWrite(devinfo.iobase, 0x90);
 #ifdef DEBUG_LOG
@@ -974,12 +985,13 @@ uint32_t sndSoundBlaster16::start() {
     if (sbDspReset(devinfo.iobase) == false) return SND_ERR_INVALIDCONFIG;
 
     // check if 16 bit transfer
-    is16Bit = (currentFormat & SND_FMT_INT16) == SND_FMT_INT16;
+    is16Bit = (convinfo.format & SND_FMT_INT16) == SND_FMT_INT16;
     dmaChannel = (is16Bit ? devinfo.dma2 : devinfo.dma);
 
     // set sample rate
     sbDspWrite(devinfo.iobase, 0x41);
-    sbDspWrite(devinfo.iobase, sampleRate >> 8); sbDspWrite(devinfo.iobase, sampleRate & 0xFF);
+    sbDspWrite(devinfo.iobase, convinfo.sampleRate >> 8);
+    sbDspWrite(devinfo.iobase, convinfo.sampleRate & 0xFF);
 
     // program DMA controller for transfer
     if (dmaSetup(dmaChannel, &dmaBlock, dmaBlockSize, dmaModeSingle | dmaModeAutoInit | dmaModeRead) == false)
@@ -989,7 +1001,7 @@ uint32_t sndSoundBlaster16::start() {
 #endif
     
     // start playback
-    uint32_t datalen = (dmaBufferSamples << (currentFormat & SND_FMT_STEREO ? 1 : 0)) - 1;
+    uint32_t datalen = (dmaBufferSamples << (convinfo.format & SND_FMT_STEREO ? 1 : 0)) - 1;
     uint32_t cmd = getStartCommand(convinfo);
     if (cmd == 0) return SND_ERR_INVALIDCONFIG;
 #ifdef DEBUG_LOG
@@ -1101,6 +1113,7 @@ uint32_t sndSoundBlaster16::getStartCommand(soundFormatConverterInfo & conv)
 sndESSAudioDrive::sndESSAudioDrive() : sndSBBase("ESS AudioDrive") {    
     demandModeEnable = false;
     demandModeBurstLength = 4;
+    timeConstant = 0;
 };
 
 uint32_t sndESSAudioDrive::fillDspInfo(SoundDevice::deviceInfo* info, uint32_t sbDspVersion) {
@@ -1148,14 +1161,10 @@ uint32_t sndESSAudioDrive::detectExt(SoundDevice::deviceInfo* info, uint32_t sbD
 #ifdef DEBUG_LOG
         printf("ESS extended id = 0x%X\n", extid);
 #endif
-
-        // convert form BCD to hex
-        while (extid != 0) {
-            modelNumber = modelNumber * 10 + ((extid & 0xF000) >> 12); extid <<= 4;
-        }
+        modelNumber = extid;
     }
     else {
-        modelNumber = 688;
+        modelNumber = 0x688;
     }
 
     return SND_ERR_OK;
@@ -1217,6 +1226,16 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     }
     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
+    // calculate divisor and sample rate
+    if ((modelNumber == 0x1869) || (modelNumber == 0x1879)) {
+        timeConstant = ess1869GetDivisor(sampleRate);
+        conv->sampleRate = ess1869GetActualSampleRate(sampleRate);
+    } else {
+        // use older codepath
+        timeConstant = essGetDivisor(sampleRate);
+        conv->sampleRate = essGetActualSampleRate(sampleRate);
+    }
+    
     // pass the rest to common open function
     return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
 }
@@ -1255,7 +1274,7 @@ uint32_t sndESSAudioDrive::start() {
     essRegWrite(devinfo.iobase, 0xB8, 0x04);
 
     // set mono/stereo
-    essRegWrite(devinfo.iobase, 0xA8, (essRegRead(devinfo.iobase, 0xA8) & ~3) | (currentFormat & SND_FMT_STEREO ? 1 : 3));
+    essRegWrite(devinfo.iobase, 0xA8, (essRegRead(devinfo.iobase, 0xA8) & ~3) | (convinfo.format & SND_FMT_STEREO ? 1 : 3));
 
     // set single transfer DMA (TODO: demand mode for bus offloading?)
     if ((demandModeEnable) && ((dmaBufferSize & 3) == 0)) {
@@ -1266,24 +1285,21 @@ uint32_t sndESSAudioDrive::start() {
     } else essRegWrite(devinfo.iobase, 0xB9, 0);
 
     // set sample/filter rate
-    uint32_t divisor = 0;
-    if ((modelNumber == 1869) || (modelNumber == 1879)) {
+    uint32_t timeConstant = 0;
+    if ((modelNumber == 0x1869) || (modelNumber == 0x1879)) {
 #ifdef DEBUG_LOG
         printf("ESS1869/1879 -> enable 768khz clock\n");
 #endif
         // enable 768khz clock
         sbMixerWrite(devinfo.iobase, 0x71, (sbMixerRead(devinfo.iobase, 0x71) | 0x20));
-        divisor = ess1869GetDivisor(sampleRate);
-    } else {
-        // use older codepath
-        divisor = essGetDivisor(sampleRate);
     }
-    uint32_t filterRate = 256 - (7160000 * 20) / (8 * 82 * sampleRate); // 80% of half of samplerate
-    essRegWrite(devinfo.iobase, 0xA1, divisor);
+
+    uint32_t filterRate = 256 - (7160000 * 20) / (8 * 82 * convinfo.sampleRate); // 80% of half of samplerate
+    essRegWrite(devinfo.iobase, 0xA1, timeConstant);
     essRegWrite(devinfo.iobase, 0xA2, filterRate);
 
     // set 11/22/44 khz rate fixup (ESS1868 and higher only?)
-    if (((sampleRate % 11025) == 0) && (modelNumber >= 1868)) {
+    if (((convinfo.sampleRate % 11025) == 0) && (modelNumber >= 0x1868)) {
 #ifdef DEBUG_LOG
         printf("sample rate = %d -> enable rate fixup\n", sampleRate);
 #endif
@@ -1302,12 +1318,12 @@ uint32_t sndESSAudioDrive::start() {
     essRegWrite(devinfo.iobase, 0xA5, (datalen) >> 8);
 
     // more init!
-    essRegWrite(devinfo.iobase, 0xB6, currentFormat & SND_FMT_SIGNED ? 0x00 : 0x80);
-    essRegWrite(devinfo.iobase, 0xB7, currentFormat & SND_FMT_SIGNED ? 0x71 : 0x51);
+    essRegWrite(devinfo.iobase, 0xB6, convinfo.format & SND_FMT_SIGNED ? 0x00 : 0x80);
+    essRegWrite(devinfo.iobase, 0xB7, convinfo.format & SND_FMT_SIGNED ? 0x71 : 0x51);
     essRegWrite(devinfo.iobase, 0xB7,
-        0x90 | (currentFormat & SND_FMT_SIGNED ? 0x20 : 0x00) |
-        (currentFormat & SND_FMT_INT16 ? 0x04 : 0x00) |
-        (currentFormat & SND_FMT_STEREO ? 0x08 : 0x40));     // wtf
+        0x90 | (convinfo.format & SND_FMT_SIGNED ? 0x20 : 0x00) |
+        (convinfo.format & SND_FMT_INT16 ? 0x04 : 0x00) |
+        (convinfo.format & SND_FMT_STEREO ? 0x08 : 0x40));     // wtf
 
     // enable DMA/IRQ
     essRegWrite(devinfo.iobase, 0xB1, (essRegRead(devinfo.iobase, 0xB1) & ~0xA0) | 0x50);
@@ -1317,7 +1333,7 @@ uint32_t sndESSAudioDrive::start() {
 #ifdef DEBUG_LOG
     printf("delay...\n");
 #endif
-    for (size_t i = 0; i < 12000; i++) inp(0x80);
+    for (size_t i = 0; i < 3000; i++) inp(0x80);
 
     // enable speaker
     sbDspWrite(devinfo.iobase, 0xD1);
@@ -1409,7 +1425,7 @@ bool sndESSAudioDrive::irqProc() {
 
 const char* sndESSAudioDrive::dspVerToString(SoundDevice::deviceInfo * info, uint32_t ver)
 {
-    snprintf(info->privateBuf, info->privateBufSize, "ESS%d, rev. %d", modelNumber, modelId & 0xF);
+    snprintf(info->privateBuf, info->privateBufSize, "ESS%0X, rev. %d", modelNumber, modelId & 0xF);
     info->version = info->privateBuf;
     return info->version;
 }

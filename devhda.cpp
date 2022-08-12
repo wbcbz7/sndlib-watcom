@@ -912,7 +912,7 @@ uint32_t sndHDAudio::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferS
         }
     }
     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    
+
     // pass converter info
 #ifdef DEBUG_LOG
     logdebug("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
@@ -935,9 +935,6 @@ uint32_t sndHDAudio::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferS
     // pass coverter info
     memcpy(&convinfo, conv, sizeof(convinfo));
 
-    this->currentFormat = newFormat;
-    this->sampleRate = sampleRate;
-    
     // debug output
 #ifdef DEBUG_LOG
     fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
@@ -964,8 +961,6 @@ uint32_t sndHDAudio::close() {
     isOpened = isPlaying = false;
     currentPos = irqs = 0;
     dmaChannel = dmaBlockSize = dmaBufferCount = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = dmaCurrentPtr = dmaRenderPtr = 0;
-    sampleRate = 0;
-    currentFormat = SND_FMT_NULL;
 
     return SND_ERR_OK;
 }
@@ -986,7 +981,7 @@ uint32_t sndHDAudio::start() {
     // device specific right now
 
     // build stream format
-    hdaStreamFormat.baseRate = ((sampleRate % 11025) == 0) ? 1 : 0;
+    hdaStreamFormat.baseRate = ((convinfo.sampleRate % 11025) == 0) ? 1 : 0;
     hdaStreamFormat.bitDepth = (convinfo.format & SND_FMT_INT8 ? 0 : 1);    // 8 or 16 bit
     hdaStreamFormat.channels = (convinfo.format & SND_FMT_MONO ? 0 : 1);    //  mono/stereo
     hdaStreamFormat.rateMultiplier = 0;

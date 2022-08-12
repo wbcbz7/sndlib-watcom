@@ -162,6 +162,9 @@ private:
     // is highspeed? flag
     playbackType    playbackType;
     
+    // time constant
+    uint32_t        timeConstant;
+    
     // fill info according to DSP version
     virtual uint32_t fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion);
 
@@ -292,6 +295,8 @@ private:
 
     uint32_t        modelId;            // read by DSP command 0xE7
     uint32_t        modelNumber;        // e.g 688/1868/1869
+
+    uint32_t        timeConstant;
 
     // fill info according to DSP version
     virtual uint32_t fillDspInfo(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);

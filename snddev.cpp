@@ -63,8 +63,7 @@ SoundDevice::deviceInfo& SoundDevice::deviceInfo::operator=(const SoundDevice::d
 // -------------------------------------------------------
 
 SoundDevice::SoundDevice(const char* _name, uint32_t _infoPrivateBufSize ) :
-    name(_name), currentFormat(SND_FMT_NULL), sampleRate(0),
-    callback(NULL), userdata(NULL), devinfo(_infoPrivateBufSize) {
+    name(_name), callback(NULL), userdata(NULL), devinfo(_infoPrivateBufSize) {
     memset(&irq,        0, sizeof(irqEntry));
     memset(&convinfo,   0, sizeof(convinfo));
     devinfo.clear();
@@ -110,7 +109,7 @@ uint32_t SoundDevice::init(SoundDevice::deviceInfo * info)
 
 uint32_t SoundDevice::isFormatSupported(uint32_t sampleRate, soundFormat fmt, soundFormatConverterInfo *conv)
 {
-    bool isFound = false;
+    bool isFound = false; size_t rate = 0;
     for (int i = 0; i < devinfo.capsLen; i++) {
         // check format
         if ((devinfo.caps[i].format & fmt) == 0) continue;
@@ -122,16 +121,19 @@ uint32_t SoundDevice::isFormatSupported(uint32_t sampleRate, soundFormat fmt, so
             }
         }
         else {
-            // iterate by hand
-            size_t rate = 0;
+            // iterate by hand, allow ~0.5% samplerate error
             for (rate = 0; rate < devinfo.caps[i].ratesLength; rate++) {
-                if (sampleRate == devinfo.caps[i].rates[rate]) break;
+                if (abs(sampleRate - devinfo.caps[i].rates[rate]) < (devinfo.caps[i].rates[rate] >> 8)) break;
             }
             // not found?
             if (rate >= devinfo.caps[i].ratesLength) continue;
         }
         
         // target format is found!
+        if (conv != NULL) {
+            conv->sourceSampleRate = sampleRate;
+            conv->sampleRate = (devinfo.caps[i].ratesLength == -2) ? sampleRate : devinfo.caps[i].rates[rate];
+        }
         return SND_ERR_OK;
     }
     return SND_ERR_UNSUPPORTED;
@@ -231,7 +233,51 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
         conv->format = dstfmt;
         return SND_ERR_OK;
     }
-    
+
+#ifdef SNDLIB_CONVERT_ENABLE_PCSPEAKER
+    // special xlat shit for PC speaker
+    // note the xlat table (ptr at conv->parm2) is for SIGNED 8bit samples (thus offsets 0..255 -> -128..127)
+    if (((dstfmt & SND_FMT_XLAT8) == SND_FMT_XLAT8) && ((dstfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED))  {
+        // clear all other formats that xlat8
+        dstfmt &= (~(SND_FMT_DEPTH_MASK & (~SND_FMT_XLAT8)));
+
+        if ((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16) {
+            // 16b -> xlat8
+            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_STEREO) {
+                // stereo->mono
+                conv->proc   = &sndconv_16s_xlat;
+                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80008000 : 0;
+                conv->format = dstfmt;
+                return SND_ERR_OK;
+            } else 
+            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO) {
+                // stereo->mono
+                conv->proc   = &sndconv_16m_xlat;
+                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80008000 : 0;
+                conv->format = dstfmt;
+                return SND_ERR_OK;
+            }
+        } else 
+        if ((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT8) {
+            // 8b -> xlat8
+            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_STEREO) {
+                // stereo->mono
+                conv->proc   = &sndconv_8s_xlat;
+                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80808080 : 0;
+                conv->format = dstfmt;
+                return SND_ERR_OK;
+            } else 
+            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO) {
+                // stereo->mono
+                conv->proc   = &sndconv_8m_xlat;
+                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80808080 : 0;
+                conv->format = dstfmt;
+                return SND_ERR_OK;
+            }
+        }
+    }
+#endif  
+
 #ifdef SNDLIB_CONVERT_ENABLE_ARBITRARY
     if (((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16) && ((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16)) {
         // 16b -> 16b 
@@ -300,47 +346,6 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
         else return SND_ERR_UNKNOWN_FORMAT;
     }
 #endif
-
-#ifdef SNDLIB_CONVERT_ENABLE_PCSPEAKER
-    // special xlat shit for PC speaker
-    // note the xlat table (ptr at conv->parm2) is for SIGNED 8bit samples (thus offsets 0..255 -> -128..127)
-    if (((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_XLAT8) && (dstfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED)  {
-        if ((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16) {
-            // 16b -> xlat8
-            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_STEREO) {
-                // stereo->mono
-                conv->proc   = &sndconv_16s_xlat;
-                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80008000 : 0;
-                conv->format = dstfmt;
-                return SND_ERR_OK;
-            } else 
-            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO) {
-                // stereo->mono
-                conv->proc   = &sndconv_16m_xlat;
-                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80008000 : 0;
-                conv->format = dstfmt;
-                return SND_ERR_OK;
-            }
-        } else 
-        if ((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT8) {
-            // 8b -> xlat8
-            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_STEREO) {
-                // stereo->mono
-                conv->proc   = &sndconv_8s_xlat;
-                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80808080 : 0;
-                conv->format = dstfmt;
-                return SND_ERR_OK;
-            } else 
-            if ((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO) {
-                // stereo->mono
-                conv->proc   = &sndconv_8m_xlat;
-                conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED) ? 0x80808080 : 0;
-                conv->format = dstfmt;
-                return SND_ERR_OK;
-            }
-        }
-    }
-#endif  
 
     return SND_ERR_UNKNOWN_FORMAT;
 }

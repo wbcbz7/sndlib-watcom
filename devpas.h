@@ -104,6 +104,7 @@ protected:
 
     // detection flags
     uint32_t            featureLevel;
+    uint32_t            timeConstant;
     bool                isMvSoundPresent;
 
     // detect PAS presence, fill deviceInfo, returns 1 if success

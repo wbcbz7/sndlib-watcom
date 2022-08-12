@@ -111,9 +111,9 @@ public:
     // select and init (use supplied *res info if (res != NULL))
     virtual uint32_t init(SoundDevice::deviceInfo *info = NULL);
     
-    // check if format is supported (0 if supported + passes pointer to converter procedure)
+    // check if format is supported (0 if supported, fills conv->sampleRate/surceSampleRate fields)
     virtual uint32_t isFormatSupported(uint32_t sampleRate, soundFormat fmt, soundFormatConverterInfo *conv);
-    
+
     // return converter for current format
     virtual uint32_t getConverter(soundFormat srcfmt, soundFormat dstfmt, soundFormatConverterInfo *conv);
     
@@ -159,9 +159,6 @@ protected:
     SoundDevice::deviceInfo     devinfo;
     
     // ------------ format and callback info -------------
-    soundFormat                 currentFormat;
-    uint32_t                    sampleRate;
-
     // callback info
     soundDeviceCallback         callback;
     void*                       userdata;
