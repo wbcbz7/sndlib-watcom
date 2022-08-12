@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <conio.h>
 
+#include "snddefs.h"
 #include "snddev.h"
 #include "sndfmt.h"
 #include "convert.h"
@@ -231,6 +232,7 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
         return SND_ERR_OK;
     }
     
+#ifdef SNDLIB_CONVERT_ENABLE_ARBITRARY
     if (((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16) && ((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16)) {
         // 16b -> 16b 
         if (((srcfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_STEREO) && ((dstfmt & SND_FMT_CHANNELS_MASK) == SND_FMT_MONO)) {
@@ -297,7 +299,9 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
         }
         else return SND_ERR_UNKNOWN_FORMAT;
     }
-    
+#endif
+
+#ifdef SNDLIB_CONVERT_ENABLE_PCSPEAKER
     // special xlat shit for PC speaker
     // note the xlat table (ptr at conv->parm2) is for SIGNED 8bit samples (thus offsets 0..255 -> -128..127)
     if (((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_XLAT8) && (dstfmt & SND_FMT_SIGN_MASK) == SND_FMT_UNSIGNED)  {
@@ -336,7 +340,8 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
             }
         }
     }
-    
+#endif  
+
     return SND_ERR_UNKNOWN_FORMAT;
 }
 
@@ -367,7 +372,7 @@ uint32_t DmaBufferDevice::prefill() {
 #ifdef DEBUG_LOG
         printf("prefill...\n");
 #endif
-        soundDeviceCallbackResult rtn = callback(dmaBlock.ptr, sampleRate, dmaBlockSamples, &convinfo, renderPos, userdata); // fill entire buffer
+        soundDeviceCallbackResult rtn = callback(userdata, dmaBlock.ptr, dmaBlockSamples, &convinfo, renderPos); // fill entire buffer
         switch (rtn) {
             case callbackOk         : break;
             case callbackSkip       : 
@@ -438,8 +443,8 @@ bool DmaBufferDevice::irqCallbackCaller() {
         
         // call callback
         // fill only previously played block
-        rtn = callback((uint8_t*)dmaBlock.ptr + dmaRenderPtr, sampleRate, dmaBufferSamples,
-                &convinfo, renderPos, userdata);
+        rtn = callback(userdata, (uint8_t*)dmaBlock.ptr + dmaRenderPtr, dmaBufferSamples,
+                &convinfo, renderPos);
         
         // switch back
         sndlib_restoreStack();
@@ -567,20 +572,12 @@ EXTERN_IRQPROC(12);
 //EXTERN_IRQPROC(14);
 //EXTERN_IRQPROC(15);
 
-#if 0
-void __interrupt __far (*snd_irqProcTable[16])() = {
-    IRQPROC(0),  IRQPROC(1),  IRQPROC(2),  IRQPROC(3),
-    IRQPROC(4),  IRQPROC(5),  IRQPROC(6),  IRQPROC(7),
-    IRQPROC(8),  IRQPROC(9),  IRQPROC(10), IRQPROC(11),
-    IRQPROC(12), IRQPROC(13), IRQPROC(14), IRQPROC(15)
-};
-#else
+
 void __interrupt __far (*snd_irqProcTable[16])() = {
     NULL,        NULL,        NULL,        IRQPROC(3),
     IRQPROC(4),  IRQPROC(5),  NULL,        IRQPROC(7),
     NULL,        IRQPROC(9),  IRQPROC(10), IRQPROC(11),
     IRQPROC(12), NULL,        NULL,        NULL
 };
-#endif
 
 #endif

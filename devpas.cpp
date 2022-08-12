@@ -1,3 +1,6 @@
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_PAS
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -612,3 +615,5 @@ bool sndProAudioSpectrum::irqProc() {
 
     return false;   // we're handling EOI by itself
 }
+
+#endif

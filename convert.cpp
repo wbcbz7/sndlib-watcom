@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "convert.h"
+#include "snddefs.h"
 
 // 16bit stereo -> 16bit stereo
 int __sndconvcall __declspec(naked) sndconv_memcpy(void *dst, void *src, uint32_t length, uint32_t div, uint32_t) {
@@ -25,6 +26,8 @@ int __sndconvcall __declspec(naked) sndconv_memcpy_shl(void *dst, void *src, uin
         ret
     }
 }
+
+#ifdef SNDLIB_CONVERT_ENABLE_ARBITRARY
 
 // 8 bit any -> 16 bit any (for HD audio and other PCI devices)
 int __sndconvcall sndconv_8_16(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t postmul) {
@@ -106,6 +109,62 @@ int __sndconvcall sndconv_16m_8m(void *dst, void *src, uint32_t length, uint32_t
     
     return 0;
 }
+
+// 16bit stereo -> 8 bit (un)signed mono, no dither
+int __sndconvcall sndconv_16s_8m(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t) {
+    /*
+    int32_t *p = (int32_t*)src;
+    int32_t *v = (int32_t*)dst;
+    
+    // wtf
+    if (length < 4) return 0;
+    do {
+        *v++ =  (((((*(p + 0) + (*(p + 0) >> 16))) >> 9)  & 0x000000FF)  |
+                 ((((*(p + 1) + (*(p + 1) >> 16))) >> 1)  & 0x0000FF00)  |
+                 ((((*(p + 2) + (*(p + 2) >> 16))) << 7)  & 0x00FF0000)  | 
+                 ((((*(p + 3) + (*(p + 3) >> 16))) << 15) & 0xFF000000)) ^ 0x80808080;
+                 
+        length -= 4; p += 4;
+    } while (length != 0);
+    */
+    
+    // BROKEN TO THE FUCK CODE AAAAAAAAARHGGGGGGGGG
+    
+    int16_t *p = (int16_t*)src;
+    int8_t *v  = (int8_t*)dst;
+    if (length == 0) return 0;
+    
+    #if 0
+    _asm {
+        mov     esi, [p]
+        mov     edi, [v]
+        mov     ecx, [length]
+        mov     ebx, [xormask]
+        
+    _loop:
+        mov     ax, [esi]
+        //add     ax, [esi+2]
+        //rcr     ax, 1
+        xor     ah, bh
+        mov     [edi], ah
+        add     esi, 4
+        add     edi, 1
+        dec     ecx
+        jnz     _loop
+    }
+    #endif
+    
+    do {
+        *v++ = (((*p >> 1) + (*(p+1) >> 1)) >> 8) ^ 0x80; p += 2;
+    } while(--length != 0);
+    
+    
+    return 0;
+}
+
+#endif
+
+#ifdef SNDLIB_CONVERT_ENABLE_PCSPEAKER
 
 // 8bit mono to 8bit xlated (for PC speaker)
 int __sndconvcall sndconv_8m_xlat (void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t xlatPtr) {
@@ -212,60 +271,4 @@ int __sndconvcall sndconv_16s_xlat (void *dst, void *src, uint32_t length, uint3
     return 0;
 }
 
-
-// 16bit stereo -> 8 bit (un)signed mono, no dither
-int __sndconvcall sndconv_16s_8m(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t) {
-    /*
-    int32_t *p = (int32_t*)src;
-    int32_t *v = (int32_t*)dst;
-    
-    // wtf
-    if (length < 4) return 0;
-    do {
-        *v++ =  (((((*(p + 0) + (*(p + 0) >> 16))) >> 9)  & 0x000000FF)  |
-                 ((((*(p + 1) + (*(p + 1) >> 16))) >> 1)  & 0x0000FF00)  |
-                 ((((*(p + 2) + (*(p + 2) >> 16))) << 7)  & 0x00FF0000)  | 
-                 ((((*(p + 3) + (*(p + 3) >> 16))) << 15) & 0xFF000000)) ^ 0x80808080;
-                 
-        length -= 4; p += 4;
-    } while (length != 0);
-    */
-    
-    // BROKEN TO THE FUCK CODE AAAAAAAAARHGGGGGGGGG
-    
-    int16_t *p = (int16_t*)src;
-    int8_t *v  = (int8_t*)dst;
-    if (length == 0) return 0;
-    
-    #if 0
-    _asm {
-        mov     esi, [p]
-        mov     edi, [v]
-        mov     ecx, [length]
-        mov     ebx, [xormask]
-        
-    _loop:
-        mov     ax, [esi]
-        //add     ax, [esi+2]
-        //rcr     ax, 1
-        xor     ah, bh
-        mov     [edi], ah
-        add     esi, 4
-        add     edi, 1
-        dec     ecx
-        jnz     _loop
-    }
-    #endif
-    
-    do {
-        *v++ = (((*p >> 1) + (*(p+1) >> 1)) >> 8) ^ 0x80; p += 2;
-    } while(--length != 0);
-    
-    
-    return 0;
-}
-
-
-
-
-// find converter procedure
+#endif

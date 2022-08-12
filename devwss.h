@@ -1,8 +1,10 @@
 #pragma once
 
+// Windows Sound System and GUS MAX/PnP codecs driver
 // --wbcbz7 oloz7e5
 
-// Windows Sound System and GUS MAX/PnP codecs driver
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_WSS
 
 #include <stdint.h>
 #include "snddev.h"
@@ -181,3 +183,5 @@ protected:
     // used during IRQ discovery only
     static void __interrupt wssDetectIrqProc();
 };
+
+#endif

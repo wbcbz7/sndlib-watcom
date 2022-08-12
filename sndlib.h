@@ -5,6 +5,10 @@
     --wbcbz7 28.o6.2o22
 */
 
+// options setup
+#include "snddefs.h"
+
+// main sndlib includes
 #include "convert.h"
 #include "snderror.h"
 #include "sndfmt.h"
@@ -60,9 +64,23 @@ enum {
 };
 
 // devices include
+#if (defined(SNDLIB_DEVICE_ENABLE_SB)   ||  \
+     defined(SNDLIB_DEVICE_ENABLE_SB16) ||  \
+     defined(SNDLIB_DEVICE_ENABLE_ESS))
 #include "devsb.h"
+#endif
+#if defined(SNDLIB_DEVICE_ENABLE_WSS)
 #include "devwss.h"
+#endif
+#if defined(SNDLIB_DEVICE_ENABLE_PAS)
 #include "devpas.h"
+#endif
+#if defined(SNDLIB_DEVICE_ENABLE_NONDMA)
 #include "devhonk.h"
+#endif
+#if defined(SNDLIB_DEVICE_ENABLE_HDA)
 #include "devhda.h"
+#endif
+#if defined(SNDLIB_DEVICE_ENABLE_DS1)
 #include "devds1.h"
+#endif

@@ -1,3 +1,6 @@
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_WSS
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -565,6 +568,7 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
             break;
 
         case 3:
+#ifdef SNDLIB_DEVICE_WSS_EXTENDED_ID_PROBING
         {
             // mnogonozhka ebanaya
             // cirrus engineers are really weird
@@ -612,6 +616,10 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
             featureLevel = WSS_FEATURE_CS4236;
             break;
         }
+#else
+        info->version = "CS4235/6/8/9";
+        featureLevel = WSS_FEATURE_CS4231;
+#endif
         break;
         default:
             snprintf(info->privateBuf, info->privateBufSize, "unknown new id 0x%X", newId);
@@ -939,3 +947,5 @@ void __interrupt sndWindowsSoundSystem::wssDetectIrqProc()
     outp(snd_IrqDetectInfo.irq->info->picbase, 0x20); if (snd_IrqDetectInfo.irq->info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
     return;
 }
+
+#endif

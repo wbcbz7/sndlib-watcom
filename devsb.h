@@ -1,8 +1,13 @@
 #pragma once
 
-// --wbcbz7 oloz7e5
+#include "snddefs.h"
+#if (defined(SNDLIB_DEVICE_ENABLE_SB)   ||  \
+     defined(SNDLIB_DEVICE_ENABLE_SB16) ||  \
+     defined(SNDLIB_DEVICE_ENABLE_ESS))
+
 
 // Sound Blaster 1.x/2.x/Pro/16 and ESS AudioDrive driver
+// --wbcbz7 oloz7e5
 
 #include <stdint.h>
 #include "snddev.h"
@@ -96,6 +101,8 @@ protected:
 
 };
 
+#ifdef SNDLIB_DEVICE_ENABLE_SB
+
 // SB 1.x/2.x/Pro driver
 class sndSoundBlaster2Pro : public sndSBBase {
 
@@ -147,8 +154,8 @@ public:
 private:
 
     enum playbackType {
-        SingleCycle = 0,        // SB 1.x/2.0 only
-        AutoInit,               // SB 2.01+/Pro up to 11m/22s
+        SingleCycle = 0,        // SB 1.x only
+        AutoInit,               // SB 2.00+/Pro up to 11m/22s
         HighSpeed               // SB 2.01+/Pro above 11m/22s
     };
 
@@ -160,6 +167,10 @@ private:
 
     virtual bool    irqProc();
 };
+
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_SB16
 
 // SB16 driver
 class sndSoundBlaster16 : public sndSBBase {
@@ -221,6 +232,10 @@ private:
     // get start command
     virtual uint32_t getStartCommand(soundFormatConverterInfo &conv);
 };
+
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_ESS
 
 // ESS ioctl definitions
 enum {
@@ -297,3 +312,6 @@ private:
     uint32_t        demandModeBurstLength;
 };
 
+#endif
+
+#endif

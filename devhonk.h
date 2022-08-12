@@ -1,8 +1,10 @@
 #pragma once
 
+// non-DMA (PC Speaker and Covox drivers)
 // --wbcbz7 22o52o22
 
-// PC Honker and Covox routines (ugh)
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_NONDMA
 
 #include <stdint.h>
 #include "snddev.h"
@@ -14,7 +16,6 @@
 #include "dma.h"
 #include "dpmi.h"
 #include "sndioctl.h"
-
 
 #pragma pack(push, 1)
 // non-DMA sound device IRQ0 structure
@@ -180,6 +181,8 @@ protected:
     uint8_t        *convtab;
 };
 
+#ifdef SNDLIB_DEVICE_ENABLE_PC_SPEAKER
+
 // PC speaker sound driver
 class sndPcSpeaker : public sndNonDmaBase {
     
@@ -242,6 +245,9 @@ protected:
     virtual bool doneConversionTab();
 };
 
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_COVOX
 
 // Covox driver
 class sndCovox : public sndNonDmaBase {
@@ -301,6 +307,10 @@ protected:
 
 };
 
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_DUAL_COVOX
+
 // Dual Covox driver
 class sndDualCovox : public sndCovox {
     
@@ -356,7 +366,10 @@ protected:
 
 };
 
-// Stereo ioctl definitions
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_STEREO_ON_1
+// Stereo-on-1 ioctl definitions
 enum {
     SND_IOCTL_STEREO_ON_1_FAST_PROTOCOL_GET = SND_IOCTL_DEVICE_SPECIFIC,
     SND_IOCTL_STEREO_ON_1_FAST_PROTOCOL_SET,
@@ -421,3 +434,6 @@ protected:
     // fill covox stuff
     virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
 };
+#endif
+
+#endif

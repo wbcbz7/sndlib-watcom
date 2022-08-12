@@ -1,3 +1,9 @@
+// non-DMA (PC Speaker and Covox drivers)
+// --wbcbz7 22o52o22
+
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_NONDMA
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -563,6 +569,7 @@ uint32_t sndNonDmaBase::done() {
 // --------------------------------------
 // (the almighty) PC Honker driver
 
+#ifdef SNDLIB_DEVICE_ENABLE_PC_SPEAKER
 sndPcSpeaker::sndPcSpeaker() : sndNonDmaBase("PC Speaker") {
     patchTable = &snddev_irq0_patch_pcspeaker;
 }
@@ -627,10 +634,12 @@ bool sndPcSpeaker::doneConversionTab() {
 
     return true;
 }
+#endif
 
 // --------------------------------------
 // Covox Speech Thing aka LPT DAC, mono
 
+#ifdef SNDLIB_DEVICE_ENABLE_COVOX
 sndCovox::sndCovox(const char* name) : sndNonDmaBase(name) {
     patchTable = &snddev_irq0_patch_pcspeaker;
     // scan BIOS data area and fixup BIOS LPT resources
@@ -683,10 +692,12 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
 
     return SND_ERR_OK;
 }
+#endif
 
 // --------------------------------------
 // Dual Covox aka Dual LPT DAC, stereo
 
+#ifdef SNDLIB_DEVICE_ENABLE_DUAL_COVOX
 sndDualCovox::sndDualCovox() : sndCovox("Dual Covox LPT DAC") {
     patchTable = &snddev_irq0_patch_dualcovox;
     // sndCovox() scans BDA by itself
@@ -735,10 +746,12 @@ uint32_t sndDualCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
 
     return SND_ERR_OK;
 }
+#endif
 
 // --------------------------------------
 // Stereo-On-1 LPT DAC, stereo :)
 
+#ifdef SNDLIB_DEVICE_ENABLE_STEREO_ON_1
 sndStereoOn1::sndStereoOn1() : sndCovox("Stereo-On-1 LPT DAC") {
     patchTable = &snddev_irq0_patch_stereo1;
     // sndCovox() scans BDA by itself
@@ -827,3 +840,5 @@ uint32_t sndStereoOn1::ioctl(uint32_t function, void *data, uint32_t len) {
     }
     return SND_ERR_UNSUPPORTED;
 }
+#endif
+#endif

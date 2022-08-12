@@ -1,8 +1,10 @@
 #pragma once
 
+// Intel High Definition Audio generic driver
 // --wbcbz7 23.o6.2o22
 
-// Intel High Definition Audio generic driver
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_HDA
 
 #include <stdint.h>
 #include "snddev.h"
@@ -128,3 +130,4 @@ protected:
     uint32_t resetCodec(SoundDevice::deviceInfo* info, bool setupPCI);
 };
 
+#endif

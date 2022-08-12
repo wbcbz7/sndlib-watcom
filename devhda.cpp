@@ -1,3 +1,6 @@
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_HDA
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -1115,3 +1118,5 @@ uint64_t sndHDAudio::getPos() {
     }
     else return 0;
 }
+
+#endif

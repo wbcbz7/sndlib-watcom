@@ -4,6 +4,7 @@
 #include <conio.h>
 
 #include "sndlib.h"
+#include "snddefs.h"
 #include "snddev.h"
 #include "sndfmt.h"
 #include "convert.h"
@@ -41,21 +42,43 @@ uint32_t sndlibDone() {
 SoundDevice* sndlibCreateSpecificDevice(uint32_t id) {
     switch(id) {
         // non-DMA devices...
+#ifdef SNDLIB_DEVICE_ENABLE_PC_SPEAKER
         case SND_CREATE_DEVICE_PC_SPEAKER:  return new sndPcSpeaker();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_COVOX
         case SND_CREATE_DEVICE_COVOX     :  return new sndCovox();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_DUAL_COVOX
         case SND_CREATE_DEVICE_DUAL_COVOX:  return new sndDualCovox();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_STEREO_ON_1
         case SND_CREATE_DEVICE_STEREO_ON_1: return new sndStereoOn1();
+#endif
 
         // ISA DMA devices...
+#ifdef SNDLIB_DEVICE_ENABLE_SB
         case SND_CREATE_DEVICE_SB:          return new sndSoundBlaster2Pro();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_SB16
         case SND_CREATE_DEVICE_SB16:        return new sndSoundBlaster16();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_WSS
         case SND_CREATE_DEVICE_WSS:         return new sndWindowsSoundSystem();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_ESS
         case SND_CREATE_DEVICE_ESS:         return new sndESSAudioDrive();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_PAS
         case SND_CREATE_DEVICE_PAS:         return new sndProAudioSpectrum();
+#endif
 
         // PCI/PCIe bus master devices...
+#ifdef SNDLIB_DEVICE_ENABLE_HDA
         case SND_CREATE_DEVICE_HDA:         return new sndHDAudio();
+#endif
+#ifdef SNDLIB_DEVICE_ENABLE_DS1
         case SND_CREATE_DEVICE_DS1:         return new sndYamahaDS1();
+#endif
 
         default:  return NULL;
     }
@@ -127,6 +150,9 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
         // request specific device
         probeDevices[probeDeviceIdx] = sndlibCreateSpecificDevice(id);
 
+        // check if such device class is available
+        if (probeDevices[probeDeviceIdx] == NULL) continue;
+
         // detect if requested
         if (((flags & SND_CREATE_SKIP_DETECTION) == 0) && (probeDevices[probeDeviceIdx]->detect() != SND_ERR_OK))
             delete probeDevices[probeDeviceIdx];
@@ -137,6 +163,7 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
     if (probeDeviceIdx == 0) return SND_ERR_NOTFOUND;
 
     // show selector
+#ifdef SNDLIB_ENABLE_MANUAL_SETUP
     if ((flags & SND_CREATE_DEVICE_MASK) != SND_CREATE_DEVICE_AUTO_DETECT) {
         printf(" select available sound device: \n");
         for (size_t i = 0; i < probeDeviceIdx; i++) {
@@ -162,6 +189,7 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
             selection = (ch >= 'A' ? (ch + 10 - 'A') : (ch - '0'));
         } while (selection >= probeDeviceIdx);
     }
+#endif
 
     // free unused devices
     for (uint32_t i = 0; i < probeDeviceIdx; i++) if (i != selection) delete probeDevices[i];

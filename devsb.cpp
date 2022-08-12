@@ -1,3 +1,8 @@
+#include "snddefs.h"
+#if (defined(SNDLIB_DEVICE_ENABLE_SB)   ||  \
+     defined(SNDLIB_DEVICE_ENABLE_SB16) ||  \
+     defined(SNDLIB_DEVICE_ENABLE_ESS))
+
 #include <stdint.h>
 #include <string.h>
 #include <stdlib.h>
@@ -588,6 +593,8 @@ uint32_t sndSBBase::ioctl(uint32_t function, void* data, uint32_t len)
     return SND_ERR_UNSUPPORTED;
 }
 
+#ifdef SNDLIB_DEVICE_ENABLE_SB
+
 // ----------- SB 1.x/2.x/Pro common stuff -------------------------
 
 sndSoundBlaster2Pro::sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 1.x/2.x/Pro") {}
@@ -751,8 +758,6 @@ uint32_t sndSoundBlaster2Pro::start() {
     printf("dma ready\n");
 #endif
 
-    printf("%d, %d\n", dmaBufferSize, dmaBlockSize);
-
     // init mixer stereo mode (sbpro only)
     // warning - creative official doc asks you to do 1-byte single cycle transfer (to avoid reversed stereo?) then do actual transfers, we'll omit it now
     if ((dspVersion >> 8) == 0x3) {
@@ -884,6 +889,9 @@ bool sndSoundBlaster2Pro::irqProc() {
     return false;   // we're handling EOI by itself
 }
 
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_SB16
 // ----------- SB16 common stuff -------------------------
 
 sndSoundBlaster16::sndSoundBlaster16() : sndSBBase("Sound Blaster 16") {
@@ -1084,6 +1092,9 @@ uint32_t sndSoundBlaster16::getStartCommand(soundFormatConverterInfo & conv)
     return (uint16_t)((mode << 8) | cmd);
 }
 
+#endif
+
+#ifdef SNDLIB_DEVICE_ENABLE_ESS
 // --------------------------------------------------
 // ESS AudioDrive driver
 
@@ -1402,4 +1413,8 @@ const char* sndESSAudioDrive::dspVerToString(SoundDevice::deviceInfo * info, uin
     info->version = info->privateBuf;
     return info->version;
 }
+
+#endif
+
+#endif
 

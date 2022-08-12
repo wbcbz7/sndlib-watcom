@@ -9,7 +9,7 @@ FILE *logfile = NULL;
 char *logerr_header = ">> ERROR [%s:%d]: ", *logfatal_header = ">> FATAL [%s:%d]: ", *logdebug_header = ">> DEBUG [%s:%d]: ";
 
 // somewhere from stack overflow :]
-void format_time(FILE *f) {
+static void format_time(FILE *f) {
     if (!f) return;
     
     time_t rawtime;

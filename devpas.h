@@ -1,8 +1,10 @@
 #pragma once
 
+// Pro Audio Spectrum original/Plus/16 driver
 // --wbcbz7 l9o52o22
 
-// Pro Audio Spectrum original/Plus/16 driver
+#include "snddefs.h"
+#ifdef SNDLIB_DEVICE_ENABLE_PAS
 
 #include <stdint.h>
 #include "snddev.h"
@@ -123,3 +125,5 @@ protected:
     MVSoundShadowRegisters  localShadow;
 
 };
+
+#endif
