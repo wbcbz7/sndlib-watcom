@@ -17,7 +17,6 @@ struct soundFormatConverterInfo {
     soundFormatConverter    proc;                   // converter procedure pointer
     uint32_t                parm;                   // passed in edx while calling proc
     uint32_t                parm2;                  // passed in ebx while calling proc
-    uint32_t                defaultBufferSamples;   // default buffer size in samples
     uint32_t                bytesPerSample;         // bytes per each sample
     uint32_t                sourceSampleRate;       // requested sample rate
     uint32_t                sampleRate;             // actual    sample rate
