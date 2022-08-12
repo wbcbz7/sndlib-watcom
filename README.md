@@ -2,12 +2,194 @@
 
 totally work in progress
 
+current features:
+
+* broad sound device support (from tiny PC Honker, Covox and Sound Blaster cards to HD Audio codecs, see below for the full list)
+
+* easy API (comparable to other audio libraries, like ProtAudio)
+
+* IRQ0 free! (except for Covox and PC Speaker, of course)
+
+* high compatibility with any DOS environments, from pure DOS to Windows 9x.
+
+* comes with a couple of examples (background .wav and MP2 players)
 
 
 --wbcbz7 o9.o6.2o22
 
 
 
+# Quick Start (for those who just want to get the sound up :)
+
+1. First, make sure you have all sndlib include files in your include path, and `sndlib.h` is included anywhere the soundlib stuff is used. you know :)
+
+2. Initialize sndlib:
+
+   ```c++
+   uint32_t rtn = sndlibInit();
+   if (rtn != SND_ERR_OK) {
+       // parse error code and do the cleanup
+   }
+   ```
+
+3. Query and detect available sound devices
+
+   ```c++
+   	// somewhere..
+   	SoundDevice *dev; // pointer to sound device object
+   
+   	rtn = sndlibCreateDevice(&dev, autosetup ? SND_CREATE_DEVICE_AUTO_DETECT : SND_CREATE_DEVICE_MANUAL_SELECT);
+       if (rtn == SND_ERR_USEREXIT) {
+           printf("user exit\n");
+           // do the cleanup
+       }
+       if (rtn != SND_ERR_OK) {
+           // parse error code and do the cleanup
+       }
+   
+   	// device is created and opened
+   ```
+
+   During `sndlibCreateDevice()`, sndlib detects every sound device present, then, if `SND_CREATE_DEVICE_MANUAL_SELECT` flag is set, promts the user to select the device (example):
+
+   ```
+    select available sound device: 
+    0 - Sound Blaster 16 (DSP v.4.05)
+    1 - Sound Blaster 2.0 (DSP v.4.05)
+    2 - Stereo-On-1 LPT DAC (port 0x278)
+    3 - Dual Covox DAC (port 0x378/0x278)
+    4 - Covox LPT DAC (port 0x278)
+    5 - PC Speaker (PWM)
+    ------------------------------------------
+    press [0 - 5] to select device, [ESC] to exit... 
+   ```
+
+   If used pressed the Esc key, `SND_ERR_USEREXIT` is returned. `SND_ERR_OK` means device is successfully selected and detected, and appropriate device object at `dev` is created, and from now you have to work with that object.
+
+   if `sndlibCreateDevice()` called with `SND_CREATE_DEVICE_AUTO_SELECT` flag, the best available device is selected automatically.
+
+4. Init sound device:
+
+   ```c++
+   rtn = dev->init();
+   if (rtn != SND_ERR_OK) {
+       // parse the error and do the cleanup
+   }
+   ```
+
+5. Open the device:
+
+   ```
+   soundFormatConverterInfo converterInfo;
+   
+   rtn = dev->open(sampleRate, format, bufferSamples, flags, callback, userPtr, &converterInfo);
+   if (rtn != SND_ERR_OK) {
+   	// parse the error and do the cleanup
+   }
+   ```
+
+   `sampleRate` is literally the source audio sample rate in samples per second, i.e 44100 means 44100 Hz, or samples per second.
+
+   `format` is a combination of bits defining the sound format of source data (see `sndfmt.h`):
+
+   ```
+   SND_FMT_INT8     - 8  bits per sample  
+   SND_FMT_INT16    - 16 bits per sample, little-endian
+   SND_FMT_MONO     - 1 channel mono samples
+   SND_FMT_STEREO   - 2 channels stereo samples
+   SND_FMT_SIGNED   - signed data format
+   SND_FMT_UNSIGNED - unsigned data format
+   ```
+
+   examples:
+
+   ```
+   SND_FMT_INT8  | SND_FMT_STEREO | SND_FMT_UNSIGNED; // 8 bit unsigned stereo
+   SND_FMT_INT16 | SND_FMT_MONO   | SND_FMT_SIGNED;   // 16 bit signed mono
+   ```
+
+   `bufferSamples` defines length of primary sound buffer in samples, i.e. 1024 means each primary (aka DMA) buffer holds 1024 audio samples. Generally, values around 1024-2048 samples are fine, more than 2048 samples could cause issues under multitasking environments like Windows, and require system DMA buffer tweaks, and lesser values increase interrupt frequency.
+
+   `callback` points to callback procedure, more on that later :)
+
+   `userPtr` holds arbitrary user pointer - you can use it as `this` for your sound wrapper class, or point to any data you would have to access in the callback.
+
+   `converterInfo` stores all the necessary sound format info:
+
+   ```
+   struct soundFormatConverterInfo {
+       soundFormat             format;             // target    sound format
+       soundFormatConverter    proc;               // converter procedure pointer
+       uint32_t                parm;               // passed in edx while calling proc
+       uint32_t                parm2;              // passed in ebx while calling proc
+       uint32_t                bytesPerSample;     // bytes per each sample
+       uint32_t                sourceSampleRate;   // requested sample rate
+       uint32_t                sampleRate;         // actual    sample rate
+   };
+   ```
+
+   * `converterInfo.bytesPerSample` holds byte count per each sample, i.e 16bit stereo sample is 4 bytes (first 2 bytes for left channel, second 2 bytes for right), 8bit mono sample is 1 byte.
+   * `converterInfo.sampleRate` is the actual sample rate the sound device is playing sound data back. example are SB 1.x/2.x/Pro cards rounding sample rate to nearest time constant, like 22050 Hz is rounded to 22222 Hz, and 44100 Hz would play at 43478 Hz. in contrast, SB16, WSS and HD Audio play audio at exact sample rate, like 44100 Hz being exact 44100 Hz.
+
+6. Speaking of callback, the signature is:
+
+   ```
+   soundDeviceCallbackResult callback(void* userPtr, void* buffer, uint32_t bufferSamples, soundFormatConverterInfo *fmt, uint64_t bufferPos);
+   ```
+
+   `buffer` points to target sound buffer of `fmt->format` format, with `bufferSamples` length in samples. `bufferPos` holds current stream position in samples since start, and `userPtr` and `fmt` are the same as in step 5.
+
+   short callback example:
+
+   ```c++
+// structure holding info about surce audio data
+struct SoundInfo {
+   int16_t  *srcBuffer;
+   uint32_t bytesPerSample; 
+};
+   
+soundDeviceCallbackResult callback(void* userPtr, void* buffer, uint32_t bufferSamples, soundFormatConverterInfo *fmt, uint64_t bufferPos);
+{
+   // cast userPtr to something, i.e, pointer to SoundInfo
+   SoundInfo* soundInfo = (SoundInfo*)userPtr;
+       
+   // copy data to DMA buffer, with format conversion
+   fmt->proc(buffer, soundInfo->srcBuffer, bufferSamples, fmt->parm, fmt->parm2);
+       
+   // get rendered audio size in bytes
+   uint32_t bufferBytes = bufferSamples * fmt->bytesPerSample;
+       
+   // adjust sourceBufferPtr
+   soundInfo->srcBuffer += (bufferBytes / soundInfo->bytesPerSample);
+       
+   // done, return success
+   return callbackOk;   
+}
+   
+   ```
+
+   The callback is being called periodically at each IRQ, on the separate protected mode stack with SS==DS, and with interrupts enabled, including sound device IRQ. Since it's called in the interrupt, make sure you're not messing with DOS or BIOS functions, don't call or access anything non-reentrant (`static` variables inside callback are evil!), and make sure you are able to finish all rendering within one interrupt (if not, there is a good chance that another nested callback being called while servicing the first, screwing things up!). If possible, render/decompress/mix and convert sound to intermediate buffer in the main thread, and use callback to copy audio blocks from your mixed buffers to DMA buffer.
+
+7. Well, after this short interlude, we are finally able to start the show!
+   ```c++
+   rtn = dev->start();
+   if (rtn != SND_ERR_OK) {
+   	// parst the error
+   }
+   ```
+
+   If everything is correct, sound should come out, and callback is periodically called to feed the device with new sound data.
+
+8. Getting playing position is as simple as calling `dev->getPos()`, which returns `uint64_t` number of samples played since start of stream. Dividing by `converterInfo.sampleRate` yields current position in seconds, and so on.
+   Pause the stream with `dev->pause()`, and resume it with `dev->resume()`.  `dev->stop()` cause sound stream to stop, and you have to call `dev->start()` again to restart the stream from the beginning.
+
+9. When you are done, call `dev->close()` to close sound device, `dev->done()` to free any intermediate buffers or mappings associated with the device, and finally delete the object itself:
+
+   ```
+   sndlibDestroyDevice(dev);
+   ```
+
+   Fianlly, close sound library by calling `sndlibDone()`.
 
 
 
@@ -16,7 +198,7 @@ totally work in progress
 
 ## a. non-DMA devices
 
-implemented by reprogramming IRQ0 at sample rate, then installing custom bi-modal (separate real and protected mode) handler to push raw PCM samples to sound device at the sample rate.
+implemented by reprogramming IRQ0 at sample rate, then installing custom bi-modal (separate real and protected mode) handler for pushing raw PCM samples to sound device at the sample rate.
 
 - pros: no ISA DMA/bus mastering mess, available on almost every PC (even modern one)
 - cons: questionable sound quality (IRQ0 jitter, low bit depth, generally mono only), practically doesn't work in multitasking environments (Windows 3.x/9x/NT+ DOS box limits IRQ0 frequency to 1024 Hz, others will probably refuse to work at all)
@@ -69,7 +251,7 @@ implemented by reprogramming IRQ0 at sample rate, then installing custom bi-moda
 
 - **sample bit depth**: 8 bits unsigned, "real" bit depth depends on DAC linearity and other factors
 
-- **sample channels:** stereo only (for mono sources, select regular Covox DAC)
+- **sample channels:** mono/stereo
 
 - **HW resources:** one "true" LPT port, scanned from BIOS Data Area LPT1/2/3
 
@@ -84,6 +266,8 @@ implemented by reprogramming IRQ0 at sample rate, then installing custom bi-moda
   sndlib supports two different Stereo-On-1 protocols: slower but compatible MODPLAY (6 OUTs per stereo sample, default), and faster FT2 protocol (4 OUTs); switched by IOCTL before `init()` call.
 
   FT2 is generally compatible with all types of devices, using pin14 as inverted pin1, however for latch-based and '7528 devices it can result to inter-channel leaks for a brief amount of time. R-2R or multiplying DACs handle this fine, with slight stereo narrowing, but PWM/sigma-delta based devices could experience bad aliasing artifacts. MODPLAY protocol activates strobe only when valid data is put on the data port, hence eliminating artifacts at expense of two more OUTs.
+
+  For mono formats, Stereo-On-1 is switched to mono mode, with both strobes activated, behaving exactly like mono Covox. Unfortunately, this will work perfectly with latch-based devices only ('7528-like would have sound in right channel only and '374-based devices would not output any sound)
 
   `detect()` relies on the fact that pins 9 (D7) and 11 (bit 7 of status port *inverted*) on Stereo-On-1 are bridged together. During detection, LPT ports are scanned from the BDA LPT list backwards; for each port, if bit 7 of status port equals *inverted* bit 7 of data port, then Stereo-On-1 is assumed to be detected. 
 
@@ -243,7 +427,7 @@ Second, memory coherency issues are becoming important. PCI systems handle this 
 
   by default, audio is routed to every pin with connectivity field set to other than None and designated as Line Out, SPDIF Out and Headphone Out (see HDA spec for further info). Internal amplifiers, EAPD pin and SPDIF transmitters are activated as well. If appropriate IOCTL is sent, then Speaker pins are also configured to output, if applicable.
 
-  **NOTE:** unfortunately, while HDA controller spec is well defined and most controllers are conform with it, several quirks can result in faults such as frozen audio position, static and even occasional hangups. sndlib tries to work around these quirks, although success rate on non-Intel HDA controllers is dependent on many other factors.
+  **NOTE:** unfortunately, while HDA controller spec is well defined and most controllers are conforming with it well, several quirks can result in faults such as frozen audio position, static and even occasional hangups. sndlib tries to work around these quirks, although success rate on non-Intel HDA controllers is dependent on many other factors.
 
   In case of troubles, run any DOS application that supports HD Audio (such as MPXPLAY), exit and restart sndlib application again. If it doesn't help, restart without CONFIG.SYS/AUTOEXEC.BAT, and try again.
 
