@@ -126,7 +126,7 @@ public:
     virtual uint32_t done();
     
 protected:
-    
+
     // init IRQ0 stuff
     bool initIrq0();
 
@@ -141,6 +141,9 @@ protected:
 
     // get play position in DMA buffer in bytes
     virtual uint32_t    getPlayPos();
+
+    // get patch table
+    virtual snddev_patch_table* getPatchTable(soundFormat fmt);
 
     // init port for playback
     virtual bool initPort() { return true; }
@@ -364,6 +367,8 @@ protected:
     // fill covox stuff
     virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
 
+    // get patch table
+    virtual snddev_patch_table* getPatchTable(soundFormat fmt);
 };
 
 #endif
@@ -433,6 +438,9 @@ protected:
 
     // fill covox stuff
     virtual uint32_t fillCodecInfo(SoundDevice::deviceInfo* info);
+
+    // get patch table
+    virtual snddev_patch_table* getPatchTable(soundFormat fmt);
 };
 #endif
 

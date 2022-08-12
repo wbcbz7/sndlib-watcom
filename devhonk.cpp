@@ -347,9 +347,6 @@ uint32_t sndNonDmaBase::init(SoundDevice::deviceInfo* info)
         this->devinfo.iobase = p->iobase;
     }
 
-    // init IRQ0 structures
-    if (initIrq0() == false) return SND_ERR_NOTFOUND;
-
     // phew :)
     isInitialised = true;
 
@@ -372,9 +369,8 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
         // conversion is allowed
 
         // suggest mono if mono only
-        if ((fmt & SND_FMT_CHANNELS_MASK) >= (devinfo.caps->format & SND_FMT_CHANNELS_MASK))
+        if ((fmt & SND_FMT_CHANNELS_MASK) > (devinfo.caps->format & SND_FMT_CHANNELS_MASK))
             newFormat = (devinfo.caps->format & SND_FMT_CHANNELS_MASK) | (newFormat & ~SND_FMT_CHANNELS_MASK);
-        else return SND_ERR_UNKNOWN_FORMAT;
         
         // test if acceptable depth
         if ((fmt & SND_FMT_DEPTH_MASK) <= SND_FMT_INT16)
@@ -401,6 +397,12 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
 
     // allocate DMA buffer
     if ((result = dmaBufferInit(bufferSize, conv)) != SND_ERR_OK) return result;
+
+    // get patch table
+    patchTable = getPatchTable(conv->format);
+
+    // init IRQ0 stuff
+    if (initIrq0() == false) return SND_ERR_NOTFOUND;
 
     // help watcom to allocate registers :)
     snddev_irq0_struct *irq0struct = this->irq0struct;
@@ -448,6 +450,10 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
 
 uint32_t sndNonDmaBase::getPlayPos() {
     return irq0struct->bufferpos;
+}
+
+snddev_patch_table* sndNonDmaBase::getPatchTable(soundFormat fmt) {
+    return &snddev_irq0_patch_pcspeaker;
 }
 
 uint64_t sndNonDmaBase::getPos() {
@@ -559,6 +565,10 @@ uint32_t sndNonDmaBase::close() {
         return SND_ERR_UNINITIALIZED;
     }
 
+    // remove all irq0 stuff
+    if (isIrq0Initialised) doneIrq0();
+    isInitialised = isIrq0Initialised = false;
+
     // fill with defaults
     isOpened = false;
     dmaBlockSize = dmaBufferSize = dmaBufferSamples = dmaBlockSamples = 0;
@@ -569,10 +579,6 @@ uint32_t sndNonDmaBase::close() {
 
 uint32_t sndNonDmaBase::done() {
     if (isOpened) close();
-
-    // remove all irq0 stuff
-    if (isIrq0Initialised) doneIrq0();
-    isInitialised = isIrq0Initialised = false;
 
     return SND_ERR_OK;
 }
@@ -714,6 +720,10 @@ sndDualCovox::sndDualCovox() : sndCovox("Dual Covox LPT DAC") {
     // sndCovox() scans BDA by itself
 };
 
+snddev_patch_table* sndDualCovox::getPatchTable(soundFormat fmt) {
+    return &snddev_irq0_patch_dualcovox;
+}
+
 uint32_t sndDualCovox::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();
@@ -768,6 +778,10 @@ sndStereoOn1::sndStereoOn1() : sndCovox("Stereo-On-1 LPT DAC") {
     // sndCovox() scans BDA by itself
 };
 
+snddev_patch_table* sndStereoOn1::getPatchTable(soundFormat fmt) {
+    return (fmt & SND_FMT_STEREO ? &snddev_irq0_patch_stereo1 : &snddev_irq0_patch_pcspeaker);
+}
+
 uint32_t sndStereoOn1::detect(SoundDevice::deviceInfo *info) {
     // clear and fill device info
     this->devinfo.clear();
@@ -807,8 +821,8 @@ uint32_t sndStereoOn1::detect(SoundDevice::deviceInfo *info) {
 
 uint32_t sndStereoOn1::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->maxBufferSize = 32768;
-    info->caps          = covoxStereoCaps;
-    info->capsLen       = arrayof(covoxStereoCaps);
+    info->caps          = stereoOn1Caps;
+    info->capsLen       = arrayof(stereoOn1Caps);
     info->name          = "Stereo-On-1 LPT DAC";
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
