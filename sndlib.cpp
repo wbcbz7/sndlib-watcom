@@ -57,7 +57,7 @@ SoundDevice* sndlibCreateSpecificDevice(uint32_t id) {
 
         // ISA DMA devices...
 #ifdef SNDLIB_DEVICE_ENABLE_SB
-        case SND_CREATE_DEVICE_SB:          return new sndSoundBlaster2Pro();
+        case SND_CREATE_DEVICE_SB:          return new sndSoundBlaster();
 #endif
 #ifdef SNDLIB_DEVICE_ENABLE_SB16
         case SND_CREATE_DEVICE_SB16:        return new sndSoundBlaster16();

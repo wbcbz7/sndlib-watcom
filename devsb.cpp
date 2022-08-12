@@ -601,11 +601,11 @@ uint32_t sndSBBase::ioctl(uint32_t function, void* data, uint32_t len)
 
 // ----------- SB 1.x/2.x/Pro common stuff -------------------------
 
-sndSoundBlaster2Pro::sndSoundBlaster2Pro() : sndSBBase("Sound Blaster 1.x/2.x/Pro") {
+sndSoundBlaster::sndSoundBlaster() : sndSBBase("Sound Blaster 1.x/2.x/Pro") {
     timeConstant = 0;
 }
 
-uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion) {
+uint32_t sndSoundBlaster::fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion) {
     // fill info
     info->maxBufferSize = 32768;  // BYTES
     info->flags         = SND_DEVICE_CLOCKDRIFT;
@@ -653,7 +653,7 @@ uint32_t sndSoundBlaster2Pro::fillDspInfo(SoundDevice::deviceInfo *info, uint32_
 }
 
 
-uint32_t sndSoundBlaster2Pro::detect(SoundDevice::deviceInfo *info) {
+uint32_t sndSoundBlaster::detect(SoundDevice::deviceInfo *info) {
 
     // clear and fill device info
     this->devinfo.clear();
@@ -671,7 +671,7 @@ uint32_t sndSoundBlaster2Pro::detect(SoundDevice::deviceInfo *info) {
     return SND_ERR_OK;
 }
 
-uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
+uint32_t sndSoundBlaster::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferSize, uint32_t flags, soundDeviceCallback callback, void *userdata, soundFormatConverterInfo *conv) {
     uint32_t result = SND_ERR_OK;
     if ((conv == NULL) || (callback == NULL)) return SND_ERR_NULLPTR;
     
@@ -723,7 +723,7 @@ uint32_t sndSoundBlaster2Pro::open(uint32_t sampleRate, soundFormat fmt, uint32_
     return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
 }
 
-uint32_t sndSoundBlaster2Pro::resume() {
+uint32_t sndSoundBlaster::resume() {
     // resume playback
 
     // enable speaker
@@ -745,7 +745,7 @@ uint32_t sndSoundBlaster2Pro::resume() {
     return SND_ERR_RESUMED;
 }
 
-uint32_t sndSoundBlaster2Pro::start() {
+uint32_t sndSoundBlaster::start() {
     uint32_t rtn = SND_ERR_OK;
     if (rtn = prefill() != SND_ERR_OK) return rtn;
     
@@ -819,7 +819,7 @@ uint32_t sndSoundBlaster2Pro::start() {
 }
 
 // pause
-uint32_t sndSoundBlaster2Pro::pause() {    
+uint32_t sndSoundBlaster::pause() {    
     
     switch (playbackType) {
         case SingleCycle:
@@ -839,12 +839,12 @@ uint32_t sndSoundBlaster2Pro::pause() {
     return SND_ERR_OK;
 }
 
-uint32_t sndSoundBlaster2Pro::ioctl(uint32_t function, void * data, uint32_t len)
+uint32_t sndSoundBlaster::ioctl(uint32_t function, void * data, uint32_t len)
 {
     return sndSBBase::ioctl(function, data, len);
 }
 
-uint32_t sndSoundBlaster2Pro::stop() {
+uint32_t sndSoundBlaster::stop() {
     if (isPlaying) {
         // stop DMA
         switch (playbackType) {
@@ -877,7 +877,7 @@ uint32_t sndSoundBlaster2Pro::stop() {
 }
 
 // irq procedure
-bool sndSoundBlaster2Pro::irqProc() {
+bool sndSoundBlaster::irqProc() {
     // restart block if single cycle
     if ((playbackType == SingleCycle) && (!isPaused)) {
         sbDspWrite(devinfo.iobase, 0x14);

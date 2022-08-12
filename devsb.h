@@ -104,11 +104,11 @@ protected:
 #ifdef SNDLIB_DEVICE_ENABLE_SB
 
 // SB 1.x/2.x/Pro driver
-class sndSoundBlaster2Pro : public sndSBBase {
+class sndSoundBlaster : public sndSBBase {
 
 public:
     // constructor (nothing fancy here)
-    sndSoundBlaster2Pro();
+    sndSoundBlaster();
     
     // get device name
     //virtual const char *getName();
