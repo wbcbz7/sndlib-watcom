@@ -45,6 +45,9 @@
 // WSS: extended ID probing (CS4232 or newer, informational only, as sndlib uses AD1848 subset only)
 //#define SNDLIB_DEVICE_WSS_EXTENDED_ID_PROBING
 
+// HDA: enable buffer position workaround (still buggy :D)
+#define SNDLIB_DEVICE_HDA_BUFFER_POS_WORKAROUND
+
 // ------------------------------
 // sound format converter defines
 

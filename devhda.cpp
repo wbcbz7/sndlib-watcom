@@ -918,7 +918,7 @@ uint32_t sndHDAudio::open(uint32_t sampleRate, soundFormat fmt, uint32_t bufferS
     logdebug("src = 0x%x, dst = 0x%x\n", fmt, newFormat);
 #endif
     if (getConverter(fmt, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
-    conv->bytesPerSample = getBytesPerSample(newFormat);
+    conv->bytesPerSample = getBytesPerSample(conv->format);
 
     // we have all relevant info for opening sound device, do it now
 
@@ -1101,12 +1101,57 @@ uint32_t sndHDAudio::getPlayPos() {
     return HDA_STREAM_READ32(devinfo.membase, hdaStreamIndex, HDA_REG_STREAM_LINKPOS);
 }
 
+void sndHDAudio::irqAdvancePos() {
+#ifdef SNDLIB_DEVICE_HDA_BUFFER_POS_WORKAROUND
+    // blindly adjust play position as-is
+    dmaRenderPtr += dmaBufferSize;
+    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+    renderPos += dmaBufferSamples;
+
+
+    // adjust play position
+    dmaCurrentPtr += dmaBufferSamples;
+    if (dmaCurrentPtr >= dmaBlockSamples) {
+        currentPos += dmaBlockSamples;
+        dmaCurrentPtr = 0;
+    }
+#else
+    // recalc render ptr
+    // NOTE - can be optimized if buffer size/count is power of two, but i'm lazy :)
+    uint32_t playPos       = getPlayPos() % dmaBlockSize;
+
+    uint32_t playIdx       = playPos / dmaBufferSize;
+    uint32_t playRemainder = playPos % dmaBufferSize;   // OPTIMIZE ME!
+
+
+    // if playRemainder is not at buffer start but rather close to buffer end
+    // then HDA controller reports stream position with a lag
+    if (playRemainder >= (dmaBufferSize - (dmaBufferSize >> 8))) {
+        playIdx++;
+        //dmaPositionFixup = (int32_t)dmaBufferSize - playRemainder;
+    } else {
+        //dmaPositionFixup = 0;
+    }
+
+    // adjust render position
+    dmaRenderPtr = (playIdx + 1) * dmaBufferSize;
+    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+    renderPos += dmaBufferSamples;
+
+    // adjust play position
+    if (playIdx < dmaCurrentPtr) {
+        currentPos += dmaBlockSamples;
+    }
+    dmaCurrentPtr = playIdx;
+#endif
+
+}
+
 uint64_t sndHDAudio::getPos() {
     if (isPlaying) {
-        volatile uint64_t totalPos = 0; uint32_t timeout = 10;
+        volatile uint64_t totalPos = 0; uint32_t timeout = 20;
         // quick and dirty rewind bug fix :D
         do {
-            if (timeout != 10) hdaDelay_us(devinfo.membase, 1);
             totalPos = currentPos + (getPlayPos() / convinfo.bytesPerSample);
         } while ((totalPos < oldTotalPos) && (--timeout != 0));
         oldTotalPos = totalPos;
