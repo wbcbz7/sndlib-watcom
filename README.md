@@ -5,17 +5,33 @@ totally work in progress
 current features:
 
 * broad sound device support (from tiny PC Honker, Covox and Sound Blaster cards to HD Audio codecs, see below for the full list)
-
 * easy API (comparable to other audio libraries, like ProtAudio)
-
 * IRQ0 free! (except for Covox and PC Speaker, of course)
-
 * high compatibility with any DOS environments, from pure DOS to Windows 9x.
-
 * comes with a couple of examples (background .wav and MP2 players)
-
+* still not quite stable :)
 
 --wbcbz7 o9.o6.2o22
+
+
+
+# Building
+
+You need Open Watcom Compiler version 1.9 or newer (might work with earlier, untested) and Netwide Assembler (any recent version should work)
+
+* Install Open Watcom, make sure 32-bit DOS target platform is installed. Cross compilation is supported as well, in fact, I'm building sndlib with Win32 tools (Win64 from OW2.x should work fine).
+* Install NASM.
+* Make sure PATH variable contains paths to both Watcom tools and NASM.
+
+Then, simply run `wmake` in sndlib folder. For building sample applications, switch to corresponding directory, then run `wmake` here.
+
+
+
+# Linking with target executable
+
+At this moment, there are no separate include file for target applications, so you have to add sndlib folder to compiler include path (use wpp386's `-I=<include_path>` option). 
+
+At the linking stage, add `library sndlib.lib` to your `wlink` script. You can also generate the script during `wmake` - see examples for more info :)
 
 
 
@@ -142,35 +158,39 @@ current features:
    short callback example:
 
    ```c++
-// structure holding info about surce audio data
-struct SoundInfo {
-   int16_t  *srcBuffer;
-   uint32_t bytesPerSample; 
-};
+    // structure holding info about surce audio data
+    struct SoundInfo {
+        int16_t  *srcBuffer;
+        uint32_t bytesPerSample; 
+    };
    
-soundDeviceCallbackResult callback(void* userPtr, void* buffer, uint32_t bufferSamples, soundFormatConverterInfo *fmt, uint64_t bufferPos);
-{
-   // cast userPtr to something, i.e, pointer to SoundInfo
-   SoundInfo* soundInfo = (SoundInfo*)userPtr;
-       
-   // copy data to DMA buffer, with format conversion
-   fmt->proc(buffer, soundInfo->srcBuffer, bufferSamples, fmt->parm, fmt->parm2);
-       
-   // get rendered audio size in bytes
-   uint32_t bufferBytes = bufferSamples * fmt->bytesPerSample;
-       
-   // adjust sourceBufferPtr
-   soundInfo->srcBuffer += (bufferBytes / soundInfo->bytesPerSample);
-       
-   // done, return success
-   return callbackOk;   
-}
-   
+    soundDeviceCallbackResult callback(void* userPtr, void* buffer, uint32_t bufferSamples, soundFormatConverterInfo *fmt, uint64_t bufferPos);
+    {
+        // cast userPtr to something, i.e, pointer to SoundInfo
+        SoundInfo* soundInfo = (SoundInfo*)userPtr;
+               
+        // copy data to DMA buffer, with format conversion
+        fmt->proc(buffer, soundInfo->srcBuffer, bufferSamples, fmt->parm, fmt->parm2);
+               
+        // get rendered audio size in bytes
+        uint32_t bufferBytes = bufferSamples * fmt->bytesPerSample;
+               
+        // adjust sourceBufferPtr
+        soundInfo->srcBuffer += (bufferBytes / soundInfo->bytesPerSample);
+               
+        // done, return success
+        return callbackOk;   
+    }
    ```
 
-   The callback is being called periodically at each IRQ, on the separate protected mode stack with SS==DS, and with interrupts enabled, including sound device IRQ. Since it's called in the interrupt, make sure you're not messing with DOS or BIOS functions, don't call or access anything non-reentrant (`static` variables inside callback are evil!), and make sure you are able to finish all rendering within one interrupt (if not, there is a good chance that another nested callback being called while servicing the first, screwing things up!). If possible, render/decompress/mix and convert sound to intermediate buffer in the main thread, and use callback to copy audio blocks from your mixed buffers to DMA buffer.
+   The callback is being called periodically at each IRQ, on the separate protected mode stack with SS==DS, and with interrupts enabled, including sound device IRQ. 
+
+   Since it's called in the interrupt, make sure you're not messing with DOS or BIOS functions, don't call or access anything non-reentrant (`static` variables inside callback are evil!), and make sure you are able to finish all rendering within one interrupt (if not, there is a good chance that another nested callback being called while servicing the first, screwing things up!). If possible, render/decompress/mix and convert sound to intermediate buffer in the main thread, and use callback to copy audio blocks from your mixed buffers to DMA buffer.
+
+   If you need to use FPU/MMX registers, save FPU state at callback start, then restore before exit. See `examples/mp2play` sources for more info.
 
 7. Well, after this short interlude, we are finally able to start the show!
+
    ```c++
    rtn = dev->start();
    if (rtn != SND_ERR_OK) {
@@ -183,18 +203,26 @@ soundDeviceCallbackResult callback(void* userPtr, void* buffer, uint32_t bufferS
 8. Getting playing position is as simple as calling `dev->getPos()`, which returns `uint64_t` number of samples played since start of stream. Dividing by `converterInfo.sampleRate` yields current position in seconds, and so on.
    Pause the stream with `dev->pause()`, and resume it with `dev->resume()`.  `dev->stop()` cause sound stream to stop, and you have to call `dev->start()` again to restart the stream from the beginning.
 
+   **NOTE:** at this moment, HDA driver can report playing position incorrectly, either lagging for one-two sound buffers or periodically jump back or forth.
+
 9. When you are done, call `dev->close()` to close sound device, `dev->done()` to free any intermediate buffers or mappings associated with the device, and finally delete the object itself:
 
    ```
    sndlibDestroyDevice(dev);
    ```
 
-   Fianlly, close sound library by calling `sndlibDone()`.
+   Finally, close sound library by calling `sndlibDone()`.
+
+
+
+# Additional stuff
+
+In addition to common sound playback features, sndlib provides additional services for the use, namely DPMI and IRQ handling wrappers, and a tiny PCI device/configuration space interface. See `irq.h`, `dpmi.h` and `tinypci.h` for more info.
 
 
 
 
-# supported sound devices
+# Supported sound devices
 
 ## a. non-DMA devices
 
@@ -267,7 +295,7 @@ implemented by reprogramming IRQ0 at sample rate, then installing custom bi-moda
 
   FT2 is generally compatible with all types of devices, using pin14 as inverted pin1, however for latch-based and '7528 devices it can result to inter-channel leaks for a brief amount of time. R-2R or multiplying DACs handle this fine, with slight stereo narrowing, but PWM/sigma-delta based devices could experience bad aliasing artifacts. MODPLAY protocol activates strobe only when valid data is put on the data port, hence eliminating artifacts at expense of two more OUTs.
 
-  For mono formats, Stereo-On-1 is switched to mono mode, with both strobes activated, behaving exactly like mono Covox. Unfortunately, this will work perfectly with latch-based devices only ('7528-like would have sound in right channel only and '374-based devices would not output any sound)
+  For mono formats, Stereo-On-1 is switched to mono mode, with both strobes activated, behaving exactly like mono Covox. Unfortunately, this will work perfectly only with latch-based devices ('7528-like would have sound in right channel only and '374-based devices would not output any sound)
 
   `detect()` relies on the fact that pins 9 (D7) and 11 (bit 7 of status port *inverted*) on Stereo-On-1 are bridged together. During detection, LPT ports are scanned from the BDA LPT list backwards; for each port, if bit 7 of status port equals *inverted* bit 7 of data port, then Stereo-On-1 is assumed to be detected. 
 
@@ -304,7 +332,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
   SB 1.x are supported via single-cycle mode, which requires restarting playback every IRQ call, with the audible click between buffers.
 
-  NOTE: SB cards prior to SB16 use very coarse 1 MHz timing reference (originated from i8051 internal timer), divided by "time constant", so sample rates above ~32 kHz mono/16 kHz stereo will sound a bit out of tune (i.e, 22050 Hz is rounded to 22222 Hz, and 44100 Hz would play at 43478 Hz). Currently there is no way to obtain actual sample rate, although I might add it in the future :)
+  NOTE: SB cards prior to SB16 use very coarse 1 MHz timing reference (originated from i8051 internal timer), divided by "time constant", so sample rates above ~32 kHz mono/16 kHz stereo will sound a bit out of tune (i.e, 22050 Hz is rounded to 22222 Hz, and 44100 Hz would play at 43478 Hz). Check `convinfo->sampleRate` field after `open()` call to retrieve actual sample rate.
 
   `detect()` first reads settings from BLASTER variable, then:
 
@@ -386,7 +414,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
   **absolutely untested**, implemented by careful(-less) documentation/source reading :)
 
-  `detect()` first probes common PAS IO ranges, then, if IRQ/DMA are unknown, calls MVSOUND.SYS driver to get IRQ/DMA settings. if MVSOUND.SYS is not loaded, you MUST pass valid IRQ/DMA settings in `deviceInfo` structure, or else device initialization will fail.
+  `detect()` first probes common PAS IO ranges, then, if IRQ/DMA are unknown, calls MVSOUND.SYS driver to get IRQ/DMA settings. if MVSOUND.SYS is not loaded, you MUST pass valid IRQ/DMA settings in `deviceInfo` structure, else device initialization will fail.
 
 ### ...future plans
 
@@ -438,3 +466,4 @@ Second, memory coherency issues are becoming important. PCI systems handle this 
   * Intel Core i5-4200U + Realtek ALC3225 (Acer E1-572G) - line out
   * Intel H61 + Realtek ALC662 (Pegatron IPSMB-VH1) - line out and front panel, SPDIF untested
   * Intel HM10 + Realtek ALC662 (Intel D525MW) - line out
+
