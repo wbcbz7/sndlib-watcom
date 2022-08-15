@@ -293,7 +293,7 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
     
     if (((srcfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT8) && ((dstfmt & SND_FMT_DEPTH_MASK) == SND_FMT_INT16)) {
         // 8->16
-        conv->proc   = &sndconv_8s_8m;
+        conv->proc   = &sndconv_8_16;
         conv->parm   = ((srcfmt & SND_FMT_SIGN_MASK) != (dstfmt & SND_FMT_SIGN_MASK)) ? 0x80808080 : 0;
         conv->parm2  = (srcfmt & SND_FMT_STEREO) ? 2 :1;
         conv->format = dstfmt;
