@@ -1,7 +1,6 @@
 # preliminary .gitignore
 
 hdatest/*
-mp2play/*
 waveplay/*
 *.obj
 *.exe

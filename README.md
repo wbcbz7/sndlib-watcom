@@ -17,7 +17,7 @@ current features:
 
 # Building
 
-You need Open Watcom Compiler version 1.9 or newer (might work with earlier, untested) and Netwide Assembler (any recent version should work)
+You need Open Watcom Compiler version 1.9 or newer (might work with earlier, untested) and [Netwide Assembler](https://www.nasm.us/) (any recent version should work)
 
 * Install Open Watcom, make sure 32-bit DOS target platform is installed. Cross compilation is supported as well, in fact, I'm building sndlib with Win32 tools (Win64 from OW2.x should work fine).
 * Install NASM.
@@ -31,7 +31,7 @@ Then, simply run `wmake` in sndlib folder. For building sample applications, swi
 
 At this moment, there are no separate include file for target applications, so you have to add sndlib folder to compiler include path (use wpp386's `-I=<include_path>` option). 
 
-At the linking stage, add `library sndlib.lib` to your `wlink` script. You can also generate the script during `wmake` - see examples for more info :)
+At the linking stage, add `library [pathToLibrary]/sndlib.lib` to your `wlink` script. You can also generate the script during `wmake` - see examples for more info :)
 
 
 
@@ -460,6 +460,6 @@ tl;dr: should work under raw/XMS environments, and probably VCPI (paging enabled
 
   * AMD Ryzen 5 3600 + Realtek ALC892 (ASRock B450M Pro4) - line out and front panel, also note HDA controller integrated on the CPU
   * Intel Z77 + Realtek ALC892 (ASUS P8Z77-V Pro) - both line out and front panel output, SPDIF works
-  * Intel Core i5-4200U + Realtek ALC3225 (Acer E1-572G) - line out
+  * Intel Core i5-4200U + Realtek ALC3225 (Acer E1-572G) - line out, mono doesn't work?
   * Intel H61 + Realtek ALC662 (Pegatron IPSMB-VH1) - line out and front panel, SPDIF untested
   * Intel HM10 + Realtek ALC662 (Intel D525MW) - line out
