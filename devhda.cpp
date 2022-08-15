@@ -1070,6 +1070,7 @@ uint32_t sndHDAudio::stop() {
     // clear playing position
     currentPos = renderPos = irqs = 0;
     dmaCurrentPtr = dmaRenderPtr = 0;
+    oldTotalPos = 0;
 
     return SND_ERR_OK;
 }
@@ -1101,8 +1102,47 @@ uint32_t sndHDAudio::getPlayPos() {
     return HDA_STREAM_READ32(devinfo.membase, hdaStreamIndex, HDA_REG_STREAM_LINKPOS);
 }
 
-void sndHDAudio::irqAdvancePos() {
 #ifdef SNDLIB_DEVICE_HDA_BUFFER_POS_WORKAROUND
+#define sndlib_min(a, b) ((a) < (b) ? (a) : (b))
+#define sndlib_max(a, b) ((a) > (b) ? (a) : (b))
+#define sndlib_clamp(a, l, h) (sndlib_max(sndlib_min(a, h), l))
+
+void sndHDAudio::irqAdvancePos() {
+    // blindly adjust play position as-is
+    dmaRenderPtr += dmaBufferSize;
+    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+    renderPos += dmaBufferSamples;
+
+    // for play position i use a bit different approach
+    int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
+    playpos = sndlib_clamp(playpos, 0, dmaBufferSamples - 1);
+    playpos = (playpos < dmaCurrentPtr ? dmaBlockSamples - (dmaCurrentPtr - playpos) : playpos - dmaCurrentPtr);
+    currentPos += playpos;
+    dmaCurrentPtr = playpos;
+}
+
+uint64_t sndHDAudio::getPos() {
+    if (isPlaying) {
+        int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
+        playpos = sndlib_clamp(playpos, 0, dmaBufferSamples - 1);
+        playpos = (playpos < dmaCurrentPtr ? dmaBlockSamples - (dmaCurrentPtr - playpos) : playpos - dmaCurrentPtr);
+        volatile uint64_t totalPos = currentPos + playpos;
+        if (totalPos < oldTotalPos) return oldTotalPos; else {
+            oldTotalPos = totalPos;
+            return totalPos;
+        }
+    }
+    else return 0;
+}
+
+#undef sndlib_min
+#undef sndlib_max
+#undef sndlib_clamp
+
+#else
+
+void sndHDAudio::irqAdvancePos() {
+#if 0
     // blindly adjust play position as-is
     dmaRenderPtr += dmaBufferSize;
     if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
@@ -1159,5 +1199,7 @@ uint64_t sndHDAudio::getPos() {
     }
     else return 0;
 }
+
+#endif
 
 #endif
