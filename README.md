@@ -1,17 +1,17 @@
 # .: (the almighty) 32-bit MS-DOS digital sound library for Open Watcom C++ :.
 
-totally work in progress
+currently in a **alpha** state, work in progress
 
 current features:
 
 * broad sound device support (from tiny PC Honker, Covox and Sound Blaster cards to HD Audio codecs, see below for the full list)
-* easy API (comparable to other audio libraries, like ProtAudio)
+* easy API (comparable to other audio libraries, like PortAudio)
 * IRQ0 free! (except for Covox and PC Speaker, of course)
 * high compatibility with any DOS environments, from pure DOS to Windows 9x.
 * comes with a couple of examples (background .wav and MP2 players)
 * still not quite stable :)
 
---wbcbz7 o9.o6.2o22
+--wbcbz7 16.o8.2o22
 
 
 
@@ -104,9 +104,9 @@ At the linking stage, add `library sndlib.lib` to your `wlink` script. You can a
    }
    ```
 
-   `sampleRate` is literally the source audio sample rate in samples per second, i.e 44100 means 44100 Hz, or samples per second.
+   `sampleRate` is the source audio sample rate in samples per second, i.e 44100 means 44100 Hz, or samples per second.
 
-   `format` is a combination of bits defining the sound format of source data (see `sndfmt.h`):
+   `format` is a combination of bits defining the sound format of source data (see `sndfmt.h`, short description below):
 
    ```
    SND_FMT_INT8     - 8  bits per sample  
@@ -124,9 +124,9 @@ At the linking stage, add `library sndlib.lib` to your `wlink` script. You can a
    SND_FMT_INT16 | SND_FMT_MONO   | SND_FMT_SIGNED;   // 16 bit signed mono
    ```
 
-   `bufferSamples` defines length of primary sound buffer in samples, i.e. 1024 means each primary (aka DMA) buffer holds 1024 audio samples. Generally, values around 1024-2048 samples are fine, more than 2048 samples could cause issues under multitasking environments like Windows, and require system DMA buffer tweaks, and lesser values increase interrupt frequency.
+   `bufferSamples` defines length of primary sound buffer in samples, i.e. 1024 means each primary (aka DMA) buffer holds 1024 audio samples. Optimal values are 1024-2048 samples, more than 4096 samples could cause issues under multitasking environments like Windows, and require system DMA buffer tweaks, and lesser values increase interrupt frequency. Values less than 256 increase interrupt overhead and can cause position tracking issues with problematic devices.
 
-   `callback` points to callback procedure, more on that later :)
+   `callback` points to callback procedure, more on it later :)
 
    `userPtr` holds arbitrary user pointer - you can use it as `this` for your sound wrapper class, or point to any data you would have to access in the callback.
 
@@ -158,9 +158,9 @@ At the linking stage, add `library sndlib.lib` to your `wlink` script. You can a
    short callback example:
 
    ```c++
-    // structure holding info about surce audio data
+    // structure holding info about source audio data
     struct SoundInfo {
-        int16_t  *srcBuffer;
+        uint8_t  *srcBuffer;
         uint32_t bytesPerSample; 
     };
    
@@ -172,24 +172,21 @@ At the linking stage, add `library sndlib.lib` to your `wlink` script. You can a
         // copy data to DMA buffer, with format conversion
         fmt->proc(buffer, soundInfo->srcBuffer, bufferSamples, fmt->parm, fmt->parm2);
                
-        // get rendered audio size in bytes
-        uint32_t bufferBytes = bufferSamples * fmt->bytesPerSample;
-               
         // adjust sourceBufferPtr
-        soundInfo->srcBuffer += (bufferBytes / soundInfo->bytesPerSample);
+        soundInfo->srcBuffer += (bufferSamples * soundInfo->bytesPerSample);
                
         // done, return success
         return callbackOk;   
     }
    ```
 
-   The callback is being called periodically at each IRQ, on the separate protected mode stack with SS==DS, and with interrupts enabled, including sound device IRQ. 
+   The callback is called periodically at each IRQ, on the separate protected mode stack with SS==DS, with interrupts enabled, including sound device IRQ. 
 
    Since it's called in the interrupt, make sure you're not messing with DOS or BIOS functions, don't call or access anything non-reentrant (`static` variables inside callback are evil!), and make sure you are able to finish all rendering within one interrupt (if not, there is a good chance that another nested callback being called while servicing the first, screwing things up!). If possible, render/decompress/mix and convert sound to intermediate buffer in the main thread, and use callback to copy audio blocks from your mixed buffers to DMA buffer.
 
    If you need to use FPU/MMX registers, save FPU state at callback start, then restore before exit. See `examples/mp2play` sources for more info.
 
-7. Well, after this short interlude, we are finally able to start the show!
+7. Well, after this short interlude, we have everything to finally make some noise :)
 
    ```c++
    rtn = dev->start();
@@ -328,9 +325,9 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
   nuff said :) supported or emulated by almost every ISA sound card, as well as by certain PCI cards.
 
-  SB 2.x/Pro support auto-init playback via normal (up to 22 kHz mono/11 kHz stereo), or highspeed (anything above) modes. Note that in highspeed mode, `pause()/resume()` will not work reliably, because DSP reset is required to stop playback, and "resume DMA" DSP command seems to be ignored for highspeed modes.
+  SB 2.x/Pro support auto-init playback via normal (up to 22 kHz mono/11 kHz stereo), or so-called highspeed (anything above) modes. Note that in highspeed mode, `pause()/resume()` will not work reliably, because DSP reset is required to stop playback, and "resume DMA" DSP command seems to be ignored for highspeed modes.
 
-  SB 1.x are supported via single-cycle mode, which requires restarting playback every IRQ call, with the audible click between buffers.
+  SB 1.x is supported via single-cycle mode, which requires restarting playback every IRQ call, with the audible click between buffers.
 
   NOTE: SB cards prior to SB16 use very coarse 1 MHz timing reference (originated from i8051 internal timer), divided by "time constant", so sample rates above ~32 kHz mono/16 kHz stereo will sound a bit out of tune (i.e, 22050 Hz is rounded to 22222 Hz, and 44100 Hz would play at 43478 Hz). Check `convinfo->sampleRate` field after `open()` call to retrieve actual sample rate.
 
@@ -431,7 +428,7 @@ sndlib workarounds this by allocating sound buffer and necessary descriptors in 
 
 Second, memory coherency issues are becoming important. PCI systems handle this fine, but in some environments (like PCIe systems), we have to handle unusual stuff like PCIe traffic classes, snooping, etc. 
 
-
+tl;dr: should work under raw/XMS environments, and probably VCPI (paging enabled) as well. Native DOS DPMI clients like CWSDPMI/HDPMI32 are also fine, whereas multitaskers like Windows would fail.
 
 ### 1. High Definition Audio
 
@@ -466,4 +463,3 @@ Second, memory coherency issues are becoming important. PCI systems handle this 
   * Intel Core i5-4200U + Realtek ALC3225 (Acer E1-572G) - line out
   * Intel H61 + Realtek ALC662 (Pegatron IPSMB-VH1) - line out and front panel, SPDIF untested
   * Intel HM10 + Realtek ALC662 (Intel D525MW) - line out
-
