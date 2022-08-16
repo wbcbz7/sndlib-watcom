@@ -1115,18 +1115,16 @@ void sndHDAudio::irqAdvancePos() {
 
     // for play position i use a bit different approach
     int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
-    playpos = sndlib_clamp(playpos, 0, dmaBufferSamples - 1);
-    playpos = (playpos < dmaCurrentPtr ? dmaBlockSamples - (dmaCurrentPtr - playpos) : playpos - dmaCurrentPtr);
-    currentPos += playpos;
+    playpos = sndlib_clamp(playpos, 0, dmaBlockSamples - 1);
+    currentPos += (playpos < dmaCurrentPtr ? dmaBlockSamples + playpos - dmaCurrentPtr : playpos - dmaCurrentPtr);
     dmaCurrentPtr = playpos;
 }
 
 uint64_t sndHDAudio::getPos() {
     if (isPlaying) {
         int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
-        playpos = sndlib_clamp(playpos, 0, dmaBufferSamples - 1);
-        playpos = (playpos < dmaCurrentPtr ? dmaBlockSamples - (dmaCurrentPtr - playpos) : playpos - dmaCurrentPtr);
-        volatile uint64_t totalPos = currentPos + playpos;
+        playpos = sndlib_clamp(playpos, 0, dmaBlockSamples - 1);
+        volatile uint64_t totalPos = currentPos + (playpos < dmaCurrentPtr ? dmaBlockSamples + playpos - dmaCurrentPtr : playpos - dmaCurrentPtr);
         if (totalPos < oldTotalPos) return oldTotalPos; else {
             oldTotalPos = totalPos;
             return totalPos;
