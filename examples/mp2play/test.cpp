@@ -48,7 +48,7 @@ int main(int argc, char* argv[]) {
             else if (a == 0x1B) break;
         }
         
-        // get current positionin samples, convert to mm:ss:ms
+        // get current position in samples, convert to mm:ss:ms
         uint64_t pos                = player.getPos();
         uint64_t posInMilliseconds  = (pos * 1000 / player.getSampleRate());
         uint32_t minutes = (posInMilliseconds / (1000 * 60));
