@@ -7,10 +7,20 @@
 int __sndconvcall __declspec(naked) sndconv_memcpy(void *dst, void *src, uint32_t length, uint32_t div, uint32_t) {
     _asm {
         mov     eax, ecx
+        mov     ebx, ecx
         mov     ecx, edx
         shr     eax, cl
-        mov     ecx, eax
+        mov     edx, eax
+        shl     eax, cl
+        sub     ebx, eax
+        mov     ecx, edx
         rep     movsd
+
+        // calculate remainder
+        mov     ecx, ebx
+        jcxz    _end
+        rep     movsb
+    _end:
         ret
     }
 }
@@ -18,6 +28,7 @@ int __sndconvcall __declspec(naked) sndconv_memcpy(void *dst, void *src, uint32_
 //
 int __sndconvcall __declspec(naked) sndconv_memcpy_shl(void *dst, void *src, uint32_t length, uint32_t div, uint32_t) {
     _asm {
+        mov     ebx, ecx
         mov     eax, ecx
         mov     ecx, edx
         shl     eax, cl
@@ -87,11 +98,10 @@ int __sndconvcall sndconv_16s_8s(void *dst, void *src, uint32_t length, uint32_t
     uint32_t *p = (uint32_t*)src;
     uint32_t *v = (uint32_t*)dst;
     
-    // wtf
-    if (length < 2) return 0;
-    do {
+    if (length >= 2) do {
         *v++ = (((*p >> 8) & 0x000000FF) | ((*p >> 16) & 0x0000FF00) | ((*(p+1) << 8) & 0x00FF0000) | ((*(p+1) & 0xFF000000))) ^ xormask; p += 2; length -= 2;
-    } while (length != 0);
+    } while (length > 1);
+    if (length == 1) *(uint16_t*)v = (((*p >> 8) & 0x000000FF) | ((*p >> 16) & 0x0000FF00)) ^ xormask;
     
     return 0;
 }
@@ -101,63 +111,28 @@ int __sndconvcall sndconv_16m_8m(void *dst, void *src, uint32_t length, uint32_t
     uint32_t *p = (uint32_t*)src;
     uint32_t *v = (uint32_t*)dst;
     
-    // wtf
-    if (length < 4) return 0;
-    do {
+    if (length >= 4) do {
         *v++ = (((*p >> 8) & 0x000000FF) | ((*p >> 16) & 0x0000FF00) | ((*(p+1) << 8) & 0x00FF0000) | ((*(p+1) & 0xFF000000))) ^ xormask; p += 2; length -= 4;
-    } while (length != 0);
-    
+    } while (length > 3);
+   
+    uint16_t *p16 = (uint16_t*)p;
+    uint8_t  *v8  = (uint8_t*)v;
+    while (length-- != 0) {
+        *v8++ = (*p16++ >> 8) ^ xormask;
+    };
+
     return 0;
 }
 
 // 16bit stereo -> 8 bit (un)signed mono, no dither
-int __sndconvcall sndconv_16s_8m(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t) {
-    /*
-    int32_t *p = (int32_t*)src;
-    int32_t *v = (int32_t*)dst;
-    
-    // wtf
-    if (length < 4) return 0;
-    do {
-        *v++ =  (((((*(p + 0) + (*(p + 0) >> 16))) >> 9)  & 0x000000FF)  |
-                 ((((*(p + 1) + (*(p + 1) >> 16))) >> 1)  & 0x0000FF00)  |
-                 ((((*(p + 2) + (*(p + 2) >> 16))) << 7)  & 0x00FF0000)  | 
-                 ((((*(p + 3) + (*(p + 3) >> 16))) << 15) & 0xFF000000)) ^ 0x80808080;
-                 
-        length -= 4; p += 4;
-    } while (length != 0);
-    */
-    
-    // BROKEN TO THE FUCK CODE AAAAAAAAARHGGGGGGGGG
-    
+int __sndconvcall sndconv_16s_8m(void *dst, void *src, uint32_t length, uint32_t xormask, uint32_t) {   
     int16_t *p = (int16_t*)src;
     int8_t *v  = (int8_t*)dst;
     if (length == 0) return 0;
-    
-    #if 0
-    _asm {
-        mov     esi, [p]
-        mov     edi, [v]
-        mov     ecx, [length]
-        mov     ebx, [xormask]
-        
-    _loop:
-        mov     ax, [esi]
-        //add     ax, [esi+2]
-        //rcr     ax, 1
-        xor     ah, bh
-        mov     [edi], ah
-        add     esi, 4
-        add     edi, 1
-        dec     ecx
-        jnz     _loop
-    }
-    #endif
-    
+
     do {
         *v++ = (((*p >> 1) + (*(p+1) >> 1)) >> 8) ^ 0x80; p += 2;
     } while(--length != 0);
-    
     
     return 0;
 }
