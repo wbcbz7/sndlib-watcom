@@ -123,7 +123,7 @@ bool mp2play_dos::init(uint32_t decodedPool, uint32_t bufferSamples, bool autose
     rtn = dev->init();
     if (rtn != SND_ERR_OK) {
         printf("mp2play_dos::init() error: unable to init sound device (rtn = %d)\n", rtn);
-        delete dev;
+        sndlibDestroyDevice(dev);
         return false;
     }
 
@@ -410,14 +410,14 @@ bool mp2play_dos::done()
     
     dev->done();
     
-    delete   dev;
+    // destroy device
+    sndlibDestroyDevice(dev);
+
+    // destroy pool
     delete[] pool;
     delete[] poolEntries;
     
     isInitialized = false;
-    
-    // destroy device
-    sndlibDestroyDevice(dev);
     
     // cleanup sndlib
     if (sndlibDone() != SND_ERR_OK) return false;
