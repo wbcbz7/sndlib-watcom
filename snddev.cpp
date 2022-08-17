@@ -112,27 +112,48 @@ uint32_t SoundDevice::isFormatSupported(uint32_t sampleRate, soundFormat fmt, so
     bool isFound = false; size_t rate = 0;
     for (int i = 0; i < devinfo.capsLen; i++) {
         // check format
-        if ((devinfo.caps[i].format & fmt) == 0) continue;
+        uint32_t formatMask = (devinfo.caps[i].format & fmt);
+        if (((formatMask & SND_FMT_CHANNELS_MASK) == 0) || 
+            ((formatMask & SND_FMT_DEPTH_MASK) == 0) || 
+            ((formatMask & SND_FMT_SIGN_MASK) == 0)) continue;
         
         // check rate
-        if (devinfo.caps[i].ratesLength == -2) {
-            if ((sampleRate < devinfo.caps[i].rates[0]) || (sampleRate > devinfo.caps[i].rates[1])) {
-                continue;
+        if (sampleRate == SND_ISFORMATSUPPORTED_MAXSAMPLERATE) {
+            // get maxumum supported sample rate for this format
+            if (devinfo.caps[i].ratesLength == -2) sampleRate = devinfo.caps[i].rates[1]; else {
+                // find maximum sample rate
+                sampleRate = 0; for (uint32_t j = 0; j < devinfo.caps[j].ratesLength; j++) {
+                    if (devinfo.caps[i].rates[j] >= sampleRate) {
+                        sampleRate = devinfo.caps[i].rates[j];
+                        rate = j;
+                    }
+                }
             }
-        }
-        else {
-            // iterate by hand, allow ~0.5% samplerate error
-            for (rate = 0; rate < devinfo.caps[i].ratesLength; rate++) {
-                if (abs(sampleRate - devinfo.caps[i].rates[rate]) < (devinfo.caps[i].rates[rate] >> 8)) break;
+        } else {
+            // check if rate is supported
+            if (devinfo.caps[i].ratesLength == -2) {
+                if ((sampleRate < devinfo.caps[i].rates[0]) || (sampleRate > devinfo.caps[i].rates[1])) {
+                    continue;
+                }
             }
-            // not found?
-            if (rate >= devinfo.caps[i].ratesLength) continue;
+            else {
+                // iterate by hand, allow ~0.5% samplerate error
+                for (rate = 0; rate < devinfo.caps[i].ratesLength; rate++) {
+                    if (abs(sampleRate - devinfo.caps[i].rates[rate]) < (devinfo.caps[i].rates[rate] >> 8)) break;
+                }
+                // not found?
+                if (rate >= devinfo.caps[i].ratesLength) continue;
+            }
         }
         
-        // target format is found!
+        // target format is found! fill samplerate fields
         if (conv != NULL) {
-            conv->sourceSampleRate = sampleRate;
-            conv->sampleRate = (devinfo.caps[i].ratesLength == -2) ? sampleRate : devinfo.caps[i].rates[rate];
+            if (conv->format == SND_FMT_NULL) 
+                conv->format = devinfo.caps[i].format;
+            if (conv->sourceSampleRate == 0)
+                conv->sourceSampleRate = sampleRate;
+            if (conv->sampleRate == 0) 
+                conv->sampleRate = (devinfo.caps[i].ratesLength == -2) ? sampleRate : devinfo.caps[i].rates[rate];
         }
         return SND_ERR_OK;
     }
