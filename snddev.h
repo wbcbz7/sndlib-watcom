@@ -23,7 +23,12 @@ enum {
 // open::flags
 enum {
     SND_OPEN_NOCONVERT              = (1 << 0),         // try setting direct format, don't perform conversion
-    
+    SND_OPEN_PCSPEAKER_GEN_XLAT     = (1 << 1),         // PC Speaker only: allow SND_FMT_INT8 even if SND_OPEN_NOCONVERT and generate xlat table
+};
+
+// isFormatSupported::flage
+enum {
+    SND_ISFORMATSUPPORTED_MAXSAMPLERATE = -1,
 };
 
 enum {

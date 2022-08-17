@@ -377,6 +377,12 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
             newFormat = (devinfo.caps->format & SND_FMT_DEPTH_MASK) | (newFormat & ~SND_FMT_DEPTH_MASK);
 
         newFormat = (devinfo.caps->format & SND_FMT_SIGN_MASK) | (newFormat & ~SND_FMT_SIGN_MASK);
+    } else {
+        if ((flags & SND_OPEN_PCSPEAKER_GEN_XLAT) && (fmt & SND_FMT_INT8)) {
+            // check if XLAT8 is supported
+            uint32_t tempFmt = (newFormat & ~SND_FMT_DEPTH_MASK) | SND_FMT_XLAT8;
+            if (isFormatSupported(sampleRate, tempFmt, conv) == SND_ERR_OK) newFormat = tempFmt;
+        }
     }
     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
