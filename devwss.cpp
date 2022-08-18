@@ -26,7 +26,7 @@ const uint32_t wssIoBase[]    = { 0x530, 0xE80, 0xF40, 0x680 };     // "standard
 const uint32_t wssIrq[]       = { 3, 4, 5, 7, 9, 10, 11, 12 };
 const uint32_t wssDma[]       = { 0, 1, 3, 5, 6, 7 };               // checkme!
 
-const uint32_t wssRates[]     = { 8000, 5513, 16000, 11025, 27429, 18900, 32000, 22050, -1,    37800, -1,    44100, 48000, 33075, 9600, 6615 };
+const uint32_t wssRates[]     = { 8000, 5513, 16000, 11025, 27429, 18900, 32000, 22050, 0,     37800, 0,     44100, 48000, 33075, 9600, 6615 };
 const uint32_t wssRates64k[]  = { 8000, 5513, 16000, 11025, 27429, 18900, 32000, 22050, 54857, 37800, 64000, 44100, 48000, 33075, 9600, 6615 }; // if 64khz supported
 const uint32_t wssRatesVar[]  = { 4000, 48000 };
 
@@ -647,7 +647,7 @@ uint32_t sndWindowsSoundSystem::setFormat(SoundDevice::deviceInfo* info, uint32_
         // check format
         if (((format & SND_FMT_INT8)  && !(format & SND_FMT_UNSIGNED)) ||
             ((format & SND_FMT_INT16) && !(format & SND_FMT_SIGNED)) ||
-            ((format & (SND_FMT_INT8 | SND_FMT_INT16)) == 0)) return SND_ERR_UNSUPPORTED;
+            ((format & (SND_FMT_INT8 | SND_FMT_INT16)) == 0) || (sampleRate == 0) || (sampleRate == -1)) return SND_ERR_UNSUPPORTED;
 
         // build format
         uint32_t rawFormat = (format & SND_FMT_STEREO ? 0x10 : 0) | (format & SND_FMT_INT16 ? 0x40 : 0) | 0x00;
@@ -746,10 +746,8 @@ uint32_t sndWindowsSoundSystem::open(uint32_t sampleRate, soundFormat fmt, uint3
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | SND_FMT_INT16 | SND_FMT_SIGNED;
         }
-        if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
     }
-
-    // calculate new sample rate
+    if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     // pass converter info
 #ifdef DEBUG_LOG

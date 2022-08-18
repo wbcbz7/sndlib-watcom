@@ -216,14 +216,14 @@ uint32_t udivRound(uint32_t a, uint32_t b);
         "cmp edx, ebx"  "jb  _skip_inc" "inc eax" \
         "_skip_inc:" parm [eax] [ebx] value [eax] modify [eax ebx edx]
 
-uint32_t sbTimeConstantAccurate(uint32_t rate) {
+uint32_t sbTimeConstantAccurate(uint32_t rate, bool stereo) {
     if (rate < 4000) return 0; 
-    uint32_t tc = udivRound(1000000, rate);
+    uint32_t tc = udivRound(1000000, rate << (stereo ? 1 : 0));
 
     return 256 - tc;
 }
-uint32_t sbGetActualSampleRate(uint32_t tc) {
-    return (1000000 / (256 - tc));
+uint32_t sbGetActualSampleRate(uint32_t tc, bool stereo) {
+    return (1000000 / ((256 - tc) << (stereo ? 1 : 0)));
 }
 
 uint32_t essGetDivisor(uint32_t rate) {    
@@ -234,6 +234,7 @@ uint32_t essGetActualSampleRate(uint32_t tc) {
     return (tc >= 128 ? (795500 / (256 - tc)) : (397700 / (128 - tc)));
 }
 
+#ifdef SNDLIB_DEVICE_ESS_ENABLE_ES1869_FEATURES
 // ES1869 only: supports accurate clock rate for 48 kHz
 uint32_t ess1869GetDivisor(uint32_t rate) {
     if (rate < 4000) return 0; 
@@ -242,6 +243,7 @@ uint32_t ess1869GetDivisor(uint32_t rate) {
 uint32_t ess1869GetActualSampleRate(uint32_t tc) {
     return (tc >= 128 ? (768000 / (256 - tc)) : (793800 / (128 - tc)));
 }
+#endif
 
 bool sbDspReset(uint32_t base) {
     uint32_t timeout;
@@ -584,7 +586,7 @@ uint32_t sndSBBase::openCommon(uint32_t sampleRate, soundFormat fmt, soundFormat
 
     // debug output
 #ifdef DEBUG_LOG
-    fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes, flags 0x%X\n", fmt, newFormat, sampleRate, bufferSize, flags);
+    fprintf(stderr, __func__": requested format 0x%X, opened format 0x%X, rate %d hz, buffer %d bytes\n", fmt, newFormat, sampleRate, bufferSize);
 #endif
     
     isOpened = true;
@@ -715,9 +717,8 @@ uint32_t sndSoundBlaster::open(uint32_t sampleRate, soundFormat fmt, uint32_t bu
     }
     
     // calculate new sample rate
-    uint32_t stereoShift = (newFormat & SND_FMT_STEREO ? 1 : 0);
-    timeConstant     = sbTimeConstantAccurate(sampleRate << stereoShift);
-    conv->sampleRate = sbGetActualSampleRate(timeConstant >> stereoShift);
+    timeConstant     = sbTimeConstantAccurate(sampleRate,  newFormat & SND_FMT_STEREO);
+    conv->sampleRate = sbGetActualSampleRate(timeConstant, newFormat & SND_FMT_STEREO);
 
     // pass the rest to common open function
     return openCommon(sampleRate, fmt, newFormat, bufferSize, callback, userdata, conv);
@@ -1227,13 +1228,16 @@ uint32_t sndESSAudioDrive::open(uint32_t sampleRate, soundFormat fmt, uint32_t b
     if (isFormatSupported(sampleRate, newFormat, conv) != SND_ERR_OK) return SND_ERR_UNKNOWN_FORMAT;
 
     // calculate divisor and sample rate
+#ifdef SNDLIB_DEVICE_ESS_ENABLE_ES1869_FEATURES
     if ((modelNumber == 0x1869) || (modelNumber == 0x1879)) {
         timeConstant = ess1869GetDivisor(sampleRate);
-        conv->sampleRate = ess1869GetActualSampleRate(sampleRate);
-    } else {
+        conv->sampleRate = ess1869GetActualSampleRate(timeConstant);
+    } else 
+#endif
+    {
         // use older codepath
         timeConstant = essGetDivisor(sampleRate);
-        conv->sampleRate = essGetActualSampleRate(sampleRate);
+        conv->sampleRate = essGetActualSampleRate(timeConstant);
     }
     
     // pass the rest to common open function
@@ -1285,7 +1289,7 @@ uint32_t sndESSAudioDrive::start() {
     } else essRegWrite(devinfo.iobase, 0xB9, 0);
 
     // set sample/filter rate
-    uint32_t timeConstant = 0;
+#ifdef SNDLIB_DEVICE_ESS_ENABLE_ES1869_FEATURES
     if ((modelNumber == 0x1869) || (modelNumber == 0x1879)) {
 #ifdef DEBUG_LOG
         printf("ESS1869/1879 -> enable 768khz clock\n");
@@ -1293,6 +1297,7 @@ uint32_t sndESSAudioDrive::start() {
         // enable 768khz clock
         sbMixerWrite(devinfo.iobase, 0x71, (sbMixerRead(devinfo.iobase, 0x71) | 0x20));
     }
+#endif
 
     uint32_t filterRate = 256 - (7160000 * 20) / (8 * 82 * convinfo.sampleRate); // 80% of half of samplerate
     essRegWrite(devinfo.iobase, 0xA1, timeConstant);
@@ -1301,13 +1306,13 @@ uint32_t sndESSAudioDrive::start() {
     // set 11/22/44 khz rate fixup (ESS1868 and higher only?)
     if (((convinfo.sampleRate % 11025) == 0) && (modelNumber >= 0x1868)) {
 #ifdef DEBUG_LOG
-        printf("sample rate = %d -> enable rate fixup\n", sampleRate);
+        printf("sample rate = %d -> enable rate fixup\n", convinfo.sampleRate);
 #endif
         essRegWrite(devinfo.iobase, 0xBA, (essRegRead(devinfo.iobase, 0xBA) & ~0x40) | 0x40);
     }
 
 #ifdef DEBUG_LOG
-    printf("divisor = 0x%X, filter rate = 0x%X\n", divisor, filterRate);
+    printf("divisor = 0x%X, filter rate = 0x%X\n", timeConstant, filterRate);
 #endif
 
     dmaChannel = devinfo.dma;

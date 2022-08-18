@@ -414,7 +414,7 @@ uint32_t sndProAudioSpectrum::open(uint32_t sampleRate, soundFormat fmt, uint32_
     conv->sourceSampleRate = sampleRate;
     uint32_t stereoShift = (newFormat & SND_FMT_STEREO ? 1 : 0);
     timeConstant     = pasGetDivisor(sampleRate << stereoShift);
-    conv->sampleRate = pasGetActualSampleRate(timeConstant >> timeConstant);
+    conv->sampleRate = pasGetActualSampleRate(timeConstant) >> stereoShift;
 
     // pass converter info
 #ifdef DEBUG_LOG

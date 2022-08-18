@@ -48,6 +48,9 @@
 // HDA: enable buffer position workaround (still buggy :D)
 #define SNDLIB_DEVICE_HDA_BUFFER_POS_WORKAROUND
 
+// ESS: enable ES1869 features (accurate 48khz clock)
+#define SNDLIB_DEVICE_ESS_ENABLE_ES1869_FEATURES
+
 // ------------------------------
 // sound format converter defines
 

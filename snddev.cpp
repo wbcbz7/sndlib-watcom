@@ -109,6 +109,8 @@ uint32_t SoundDevice::init(SoundDevice::deviceInfo * info)
 
 uint32_t SoundDevice::isFormatSupported(uint32_t sampleRate, soundFormat fmt, soundFormatConverterInfo *conv)
 {
+    if (sampleRate == 0) return SND_ERR_UNSUPPORTED;
+
     bool isFound = false; size_t rate = 0;
     for (int i = 0; i < devinfo.capsLen; i++) {
         // check format
@@ -119,11 +121,12 @@ uint32_t SoundDevice::isFormatSupported(uint32_t sampleRate, soundFormat fmt, so
         
         // check rate
         if (sampleRate == SND_ISFORMATSUPPORTED_MAXSAMPLERATE) {
-            // get maxumum supported sample rate for this format
+            // get maximum supported sample rate for this format
             if (devinfo.caps[i].ratesLength == -2) sampleRate = devinfo.caps[i].rates[1]; else {
                 // find maximum sample rate
-                sampleRate = 0; for (uint32_t j = 0; j < devinfo.caps[j].ratesLength; j++) {
-                    if (devinfo.caps[i].rates[j] >= sampleRate) {
+                sampleRate = 0;
+                for (uint32_t j = 0; j < devinfo.caps[i].ratesLength; j++) {
+                    if (devinfo.caps[i].rates[j] > sampleRate) {
                         sampleRate = devinfo.caps[i].rates[j];
                         rate = j;
                     }
@@ -149,7 +152,7 @@ uint32_t SoundDevice::isFormatSupported(uint32_t sampleRate, soundFormat fmt, so
         // target format is found! fill samplerate fields
         if (conv != NULL) {
             if (conv->format == SND_FMT_NULL) 
-                conv->format = devinfo.caps[i].format;
+                conv->format = formatMask;
             if (conv->sourceSampleRate == 0)
                 conv->sourceSampleRate = sampleRate;
             if (conv->sampleRate == 0) 
