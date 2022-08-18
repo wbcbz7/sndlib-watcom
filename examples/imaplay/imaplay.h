@@ -37,7 +37,7 @@ public:
     virtual bool resume();
 
     // get position in samples
-    virtual uint64_t getPos();
+    virtual int64_t  getPos();
 
     // get sample rate
     virtual uint32_t getSampleRate();

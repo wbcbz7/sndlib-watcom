@@ -563,7 +563,7 @@ bool sndYamahaDS1::irqProc() {
     return false;   // we're handling EOI by itself
 } 
 
-uint64_t sndYamahaDS1::getPos() {
+int64_t sndYamahaDS1::getPos() {
     if (isPlaying) {
         // TODO: fix 32bit wraparound (after ~24.8 hours)
 

@@ -383,7 +383,7 @@ bool mp2play_dos::resume()
     return (dev->resume() != SND_ERR_OK);
 }
 
-uint64_t mp2play_dos::getPos()
+int64_t mp2play_dos::getPos()
 {
     uint64_t pos = dev->getPos() << (isDownsampled ? 1 : 0);
     bufferPlay = pos;

@@ -13,7 +13,7 @@ bool imaplay::pause() {return false;}
 
 bool imaplay::resume() {return false;}
 
-uint64_t imaplay::getPos() {return 0;}
+int64_t imaplay::getPos() {return 0;}
 
 uint32_t imaplay::getSampleRate() {return 0;}
 

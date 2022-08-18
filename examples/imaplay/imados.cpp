@@ -409,7 +409,7 @@ bool imaplay_dos::resume()
     return (dev->resume() != SND_ERR_OK);
 }
 
-uint64_t imaplay_dos::getPos()
+int64_t imaplay_dos::getPos()
 {
     return dev->getPos() + bufferStart;
 }

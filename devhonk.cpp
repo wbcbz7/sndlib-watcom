@@ -454,7 +454,7 @@ uint32_t sndNonDmaBase::open(uint32_t sampleRate, soundFormat fmt, uint32_t buff
     return SND_ERR_OK;
 }
 
-uint32_t sndNonDmaBase::getPlayPos() {
+int32_t sndNonDmaBase::getPlayPos() {
     return irq0struct->bufferpos;
 }
 
@@ -462,7 +462,7 @@ snddev_patch_table* sndNonDmaBase::getPatchTable(soundFormat fmt) {
     return &snddev_irq0_patch_pcspeaker;
 }
 
-uint64_t sndNonDmaBase::getPos() {
+int64_t sndNonDmaBase::getPos() {
     // read info from irq0 structure
     if (isPlaying) {
         return currentPos + irq0struct->bufferpos / convinfo.bytesPerSample;

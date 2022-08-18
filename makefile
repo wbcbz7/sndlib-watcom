@@ -13,9 +13,8 @@ INCLUDE  = .\include
 AS       = nasm.exe
 CC       = wpp386.exe
 LD       = wlink.exe
-AFLAGS   = -f win32 -l $<.lst
+AFLAGS   = -f win32
 CFLAGS   = -5r -zp16 -onhasbmi -s -zv -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
-#CFLAGS   = -5r -zp16 -oneatxh -s -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
 LFLAGS   =
 
 # add object files here

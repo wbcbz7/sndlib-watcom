@@ -13,7 +13,7 @@ bool mp2play::pause() {return false;}
 
 bool mp2play::resume() {return false;}
 
-uint64_t mp2play::getPos() {return 0;}
+int64_t mp2play::getPos() {return 0;}
 
 uint32_t mp2play::getSampleRate() {return 0;}
 

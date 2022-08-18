@@ -197,7 +197,7 @@ At the linking stage, add `library [pathToLibrary]/sndlib.lib` to your `wlink` s
 
    If everything is correct, sound should come out, and callback is periodically called to feed the device with new sound data.
 
-8. Getting playing position is as simple as calling `dev->getPos()`, which returns `uint64_t` number of samples played since start of stream. Dividing by `converterInfo.sampleRate` yields current position in seconds, and so on.
+8. Getting playing position is as simple as calling `dev->getPos()`, which returns `int64_t` number of samples played since start of stream. Dividing by `converterInfo.sampleRate` yields current position in seconds, and so on.
    Pause the stream with `dev->pause()`, and resume it with `dev->resume()`.  `dev->stop()` cause sound stream to stop, and you have to call `dev->start()` again to restart the stream from the beginning.
 
    **NOTE:** at this moment, HDA driver can report playing position incorrectly, either lagging for one-two sound buffers or periodically jump back or forth.

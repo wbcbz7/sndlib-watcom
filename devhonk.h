@@ -111,7 +111,7 @@ public:
     virtual uint32_t resume();
     
     // get playback position in samples
-    virtual uint64_t getPos();
+    virtual int64_t  getPos();
     
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
@@ -140,7 +140,7 @@ protected:
     bool doneIrq0();
 
     // get play position in DMA buffer in bytes
-    virtual uint32_t    getPlayPos();
+    virtual int32_t    getPlayPos();
 
     // get patch table
     virtual snddev_patch_table* getPatchTable(soundFormat fmt);
@@ -220,7 +220,7 @@ public:
     //virtual uint32_t pause();
     
     // get playback position in samples
-    //virtual uint64_t getPos();
+    //virtual int64_t  getPos();
     
     // ioctl
     //virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
@@ -286,7 +286,7 @@ public:
     //virtual uint32_t pause();
     
     // get playback position in samples
-    //virtual uint64_t getPos();
+    //virtual int64_t  getPos();
     
     // ioctl
     //virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
@@ -348,7 +348,7 @@ public:
     //virtual uint32_t pause();
     
     // get playback position in samples
-    //virtual uint64_t getPos();
+    //virtual int64_t  getPos();
     
     // ioctl
     //virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
@@ -414,7 +414,7 @@ public:
     //virtual uint32_t pause();
     
     // get playback position in samples
-    //virtual uint64_t getPos();
+    //virtual int64_t  getPos();
     
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);

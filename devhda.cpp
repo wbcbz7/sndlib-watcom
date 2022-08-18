@@ -1098,7 +1098,7 @@ bool sndHDAudio::irqProc() {
 }
 
 // get play position in DMA buffer in bytes
-uint32_t sndHDAudio::getPlayPos() {
+int32_t sndHDAudio::getPlayPos() {
     return HDA_STREAM_READ32(devinfo.membase, hdaStreamIndex, HDA_REG_STREAM_LINKPOS);
 }
 

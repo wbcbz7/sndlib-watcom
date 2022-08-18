@@ -183,7 +183,7 @@ uint32_t SoundDevice::pause()
     return SND_ERR_UNSUPPORTED;
 }
 
-uint64_t SoundDevice::getPos()
+int64_t SoundDevice::getPos()
 {
     return 0;
 }
@@ -453,7 +453,7 @@ static void sndlib_restoreStack();
 #pragma aux sndlib_restoreStack = \
     " lss     esp, [snddev_pm_old_stack] "
 
-uint32_t DmaBufferDevice::getPlayPos() {
+int32_t DmaBufferDevice::getPlayPos() {
     return 0;
 }
 
@@ -498,10 +498,10 @@ bool DmaBufferDevice::irqCallbackCaller() {
 void DmaBufferDevice::irqAdvancePos() {
     // recalc render ptr 
     // NOTE - can be optimized if buffer size/count is power of two, but i'm lazy :)
-    uint32_t playPos   = getPlayPos();
+    int32_t playPos   = getPlayPos();
 
     // small fixup for quirky devices which fire IRQ before actually playing entire buffer
-    uint32_t playIdx   = (playPos + (dmaBufferSize >> 6)) / dmaBufferSize;
+    int32_t playIdx   = (playPos + (dmaBufferSize >> 6)) / dmaBufferSize;
     if (playIdx >= dmaBufferCount) playIdx -= dmaBufferCount;
     dmaRenderPtr = (playIdx + 1) * dmaBufferSize;
     if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
@@ -560,7 +560,7 @@ uint32_t DmaBufferDevice::dmaBufferFree() {
     return SND_ERR_OK;
 }
 
-uint64_t DmaBufferDevice::getPos() {
+int64_t DmaBufferDevice::getPos() {
     if (!isPlaying) return 0;
     
     uint32_t timeout = 5;
@@ -579,10 +579,10 @@ uint64_t DmaBufferDevice::getPos() {
 
 IsaDmaDevice::IsaDmaDevice(const char* _name) : DmaBufferDevice(_name) {}
 
-uint32_t IsaDmaDevice::getPlayPos() {
-    int32_t pos = ((int32_t)(dmaGetCurrentAddress(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0)) - (int32_t)(((uint32_t)dmaBlock.ptr) & 0xFFFF));
-    return pos;
-    //return sndlib_clamp(pos, 0,  (int32_t)(dmaBlockSize - 1));
+int32_t IsaDmaDevice::getPlayPos() {
+    int32_t pos = (((int32_t)(dmaGetCurrentAddress(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0)) & 0xFFFF) - (int32_t)(((uint32_t)dmaBlock.ptr) & 0xFFFF));
+    //return pos;
+    return sndlib_clamp(pos, 0, ((int32_t)dmaBlockSize - 1));
     //return dmaBlockSize - (((dmaGetCurrentCount(dmaChannel, false) + 1) & 0xFFFF) << (dmaChannel >= 4 ? 1 : 0));
 }
 

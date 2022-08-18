@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
     // start playback
     if (!player.play()) return 1;
     
-    uint64_t pos = player.getPos();
+    int64_t pos = player.getPos();
     bool isPause = false;
     printf("space to pause/resume, esc to exit\n");
     
@@ -49,11 +49,11 @@ int main(int argc, char* argv[]) {
         }
         
         // get current position in samples, convert to mm:ss:ms
-        uint64_t pos                = player.getPos();
-        uint64_t posInMilliseconds  = (pos * 1000 / player.getSampleRate());
-        uint32_t minutes = (posInMilliseconds / (1000 * 60));
-        uint32_t seconds = (posInMilliseconds / 1000) % 60;
-        uint32_t ms      = (posInMilliseconds % 1000);
+        int64_t pos                = player.getPos();
+        int64_t posInMilliseconds  = (pos * 1000 / player.getSampleRate());
+        int32_t minutes = (posInMilliseconds / (1000 * 60));
+        int32_t seconds = (posInMilliseconds / 1000) % 60;
+        int32_t ms      = (posInMilliseconds % 1000);
 
         printf("\rplaypos = %8llu samples, %02d:%02d.%03d", player.getPos(), minutes, seconds, ms); fflush(stdout);
         while (inp(0x3da) & 8); while (!(inp(0x3da) & 8));

@@ -33,7 +33,7 @@ public:
     virtual bool resume();
 
     // get position (+/- 20 samples accurate, i dunno, what about RTC interpolation?)
-    virtual uint64_t getPos();
+    virtual int64_t  getPos();
 
     // get sample rate
     virtual uint32_t getSampleRate();

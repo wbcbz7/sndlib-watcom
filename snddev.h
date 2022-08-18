@@ -138,7 +138,7 @@ public:
     virtual uint32_t resume();
 
     // get playback position in samples
-    virtual uint64_t getPos();
+    virtual int64_t  getPos();
     
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);
@@ -188,17 +188,17 @@ public:
     DmaBufferDevice(const char* _name, uint32_t _infoPrivateBufSize = 64);
 
     // get playback position in samples
-    virtual uint64_t getPos();
+    virtual int64_t getPos();
 
 protected:
 
     // -------------------------- DMA stuff ------------------------
     
     // getPos() previous values
-    uint64_t        oldTotalPos;                // previous total playback pos
+    int64_t         oldTotalPos;                // previous total playback pos
 
-    uint64_t        currentPos;                 // total playback  pos
-    uint64_t        renderPos;                  // total rendering pos
+    int64_t         currentPos;                 // total playback  pos
+    int64_t         renderPos;                  // total rendering pos
     uint32_t        irqs;                       // total IRQs count
     
     // each block contains one or more buffers (2 in our case)
@@ -213,8 +213,8 @@ protected:
     uint32_t        dmaBufferSize;              // size of each buffer
     uint32_t        dmaBufferSamples;           // size of each buffer (in samples)
 
-    uint32_t        dmaCurrentPtr;              // points to current playing(!) buffer
-    uint32_t        dmaRenderPtr;               // points to current rendering buffer
+    int32_t         dmaCurrentPtr;              // points to current playing(!) buffer
+    int32_t         dmaRenderPtr;               // points to current rendering buffer
 
     // init DMA buffer
     virtual uint32_t    dmaBufferInit(uint32_t bufferSize, soundFormatConverterInfo *conv);
@@ -234,11 +234,11 @@ protected:
     // advance play/render pointers
     virtual void        irqAdvancePos();
 
-    // get play position in DMA buffer in bytes
-    virtual uint32_t    getPlayPos();
-
     // IRQ->callback caller
     virtual bool        irqCallbackCaller();
+
+    // get play position in DMA buffer in bytes
+    virtual int32_t     getPlayPos();
 
 };
 
@@ -250,7 +250,7 @@ public:
 protected:
 
     // get play position in DMA buffer in bytes
-    virtual uint32_t    getPlayPos();
+    virtual int32_t     getPlayPos();
 
 };
 
