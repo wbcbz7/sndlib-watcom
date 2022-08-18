@@ -27,9 +27,9 @@ A        = asm
 AS       = nasm.exe
 CC       = wpp386.exe
 LD       = wlink.exe
-CFLAGS   = -5r -fp5 -fpi87 -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I=$(SNDLIB_PATH);$(INCLUDE) -DDEBUG_RASTER=$(RASTER) -DIMAPLAY_USE_C_DECODERS=$(USE_C_DECODERS)
+CFLAGS   = -5r -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I=$(SNDLIB_PATH);$(INCLUDE) -DDEBUG_RASTER=$(RASTER) -DUSE_C_DECODERS=$(USE_C_DECODERS)
 LFLAGS   =
-AFLAGS   = -f win32 -dIMAPLAY_USE_C_DECODERS=$(USE_C_DECODERS)
+AFLAGS   = -f win32 -dUSE_C_DECODERS=$(USE_C_DECODERS)
 
 OBJS     = imaplay.obj imados.obj decode.obj
 OBJSTR   = file {$(OBJS)}

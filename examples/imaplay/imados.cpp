@@ -469,7 +469,7 @@ bool imaplay_dos::calculateTables()
     return true;
 }
 
-#if IMAPLAY_USE_C_DECODERS == 1
+#if USE_C_DECODERS == 1
 // sample C decoders. might do assembly version later :)
 uint32_t imaplay_decode_mono(int16_t * out, uint8_t * in, uint32_t samples) {
     int16_t* oldOut = out;

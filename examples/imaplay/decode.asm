@@ -10,7 +10,7 @@
 extern _imaplay_nextstep_table
 extern _imaplay_diff_table
 
-%if IMAPLAY_USE_C_DECODERS != 1
+%if USE_C_DECODERS != 1
 global __imaplay_decode_mono
 global __imaplay_decode_stereo
 %endif

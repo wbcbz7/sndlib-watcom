@@ -1,4 +1,4 @@
-# sndlib->mp2 resident player
+# sndlib->mp2 player
 
 **NOTE:** it's MPEG 1 Audio Layer II (aka **MP2**) player, it WON'T play any **MP3** files! 
 
