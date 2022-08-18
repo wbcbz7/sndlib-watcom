@@ -425,9 +425,9 @@ uint32_t sndSBBase::sbDetect(SoundDevice::deviceInfo *info, bool manualDetect) {
                     sbDspWrite(info->iobase, 0x40); sbDspWrite(info->iobase, sbTimeConstant(8000));
                     sbDspWrite(info->iobase, 0x14); sbDspWrite(info->iobase, probeDataLength & 0xFF); sbDspWrite(info->iobase, probeDataLength >> 8);
                     volatile uint32_t timeout = 16384;
-                    volatile uint32_t dmapos = dmaGetPos(*dma);
+                    volatile uint32_t dmapos = dmaGetCurrentCount(*dma);
                     do {
-                        if (dmapos != dmaGetPos(*dma)) {
+                        if (dmapos != dmaGetCurrentCount(*dma)) {
                             info->dma = *dma;
 #ifdef DEBUG_LOG
                             printf("found\n");

@@ -343,10 +343,10 @@ bool sndWindowsSoundSystem::wssDetect(SoundDevice::deviceInfo* info, bool manual
 
             // wait until DMA current length counter changes
             uint32_t timeout = 0x1000;
-            volatile uint32_t dmapos = dmaGetPos(*dma, false);
+            volatile uint32_t dmapos = dmaGetCurrentCount(*dma, false);
             while (--timeout) {
                 inp(0x80);
-                if (dmapos != dmaGetPos(*dma, false)) {
+                if (dmapos != dmaGetCurrentCount(*dma, false)) {
                     info->dma = *dma;
 #ifdef DEBUG_LOG
                     logdebug("found\n");

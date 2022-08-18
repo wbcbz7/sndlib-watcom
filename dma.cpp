@@ -1,4 +1,5 @@
 #include <conio.h>
+#include <stdint.h>
 
 #include "cli.h"
 #include "dma.h"
@@ -200,44 +201,49 @@ bool dmaStop(size_t chan) {
     return true;
 };
 
-unsigned short dmaRead(unsigned short port); 
+uint16_t dmaRead(unsigned short port); 
 #pragma aux dmaRead = "in  al, dx" "mov  bl, al" "in  al, dx" "mov  bh, al" parm [dx] value [bx] modify [ax]
 
-// return count of bytes left
-unsigned long dmaGetPos(size_t chan, bool lockInts) {
-#ifdef DEBUG
-    if ((chan == 4) || (chan > 7)) {
-        logerr("channel number must be for 0 to 7 (excluding 4)\n");
-        return 0;
-    }
-#endif
+// read DMA controller 16-bit register
+uint32_t dmaRead16bit(uint32_t reg, bool lockInts) {   
+    unsigned long flags;
     
     if (lockInts == true) {
         // disable interrupts!
-        unsigned long flags = pushf();
+        flags = pushf();
         _disable();
     }
-    
-    // clear flip-flop
-    inp(dmaPorts[chan].clear);
     
     // i8237 does not feature latching current address/count, so high byte can change while reading low byte!
     // so read it until retrieving correct value
     size_t timeout = 20;        // try at least 20 times
-    volatile unsigned short oldpos, pos = dmaRead(dmaPorts[chan].count);
+    volatile unsigned short oldpos, pos = dmaRead(reg);
     
     do {
         oldpos = pos;
-        pos = dmaRead(dmaPorts[chan].count);
+        pos = dmaRead(reg);
         
         if ((oldpos & 0xFF00) == (pos & 0xFF00)) break;
     } while (--timeout);
     
     if (lockInts == true) {
         // enable interrupts
-        _enable();
-        //_enable_if_enabled(flags);
+        _enable_if_enabled(flags);
     }
 
-    return pos + 1;
+    return pos;
+}
+
+// return current address (A[15..0] for 8bit channels, A[16..1] for 16bit)
+uint32_t dmaGetCurrentAddress(uint32_t chan, bool lockInts) {
+    // clear flip-flop
+    inp(dmaPorts[chan].clear);
+    return dmaRead16bit(dmaPorts[chan].address, lockInts);
+}
+
+// return current count register value
+uint32_t dmaGetCurrentCount(uint32_t chan, bool lockInts) {
+    // clear flip-flop
+    inp(dmaPorts[chan].clear);
+    return dmaRead16bit(dmaPorts[chan].count, lockInts);
 }

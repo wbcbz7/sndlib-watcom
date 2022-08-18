@@ -67,7 +67,7 @@ public:
     virtual uint32_t resume();
 
     // get playback position in samples
-    virtual uint64_t getPos();
+    //virtual uint64_t getPos();
     
     // ioctl
     virtual uint32_t ioctl(uint32_t function, void *data, uint32_t len);

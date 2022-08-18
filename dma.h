@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdlib.h>
+#include <stdint.h>
 #include "dpmi.h"
 
 enum {
@@ -57,6 +58,7 @@ bool dmaResume(size_t chan);
 // stop transfer
 bool dmaStop(size_t chan);
 
-// get current DMA transfer position
-unsigned long dmaGetPos(size_t chan, bool lockInts = true);
+// get current address and count
+uint32_t dmaGetCurrentAddress(uint32_t chan, bool lockInts = true);
+uint32_t dmaGetCurrentCount(uint32_t chan, bool lockInts = true);
 

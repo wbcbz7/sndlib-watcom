@@ -467,6 +467,9 @@ bool DmaBufferDevice::irqCallbackCaller() {
     if (snddev_pm_stack_in_use == 0) {
         snddev_pm_stack_in_use++;
         
+        // enable interrupts
+        _enable();
+
         // switch stack
         sndlib_swapStacks();
         
@@ -478,6 +481,9 @@ bool DmaBufferDevice::irqCallbackCaller() {
         // switch back
         sndlib_restoreStack();
 
+        // and disable interrupts again
+        _disable();
+
         snddev_pm_old_stack = NULL;
         snddev_pm_stack_in_use--;
     }
@@ -485,21 +491,34 @@ bool DmaBufferDevice::irqCallbackCaller() {
     return rtn == callbackOk;
 };
 
+#define sndlib_min(a, b) ((a) < (b) ? (a) : (b))
+#define sndlib_max(a, b) ((a) > (b) ? (a) : (b))
+#define sndlib_clamp(a, l, h) (sndlib_max(sndlib_min(a, h), l))
+
 void DmaBufferDevice::irqAdvancePos() {
     // recalc render ptr 
     // NOTE - can be optimized if buffer size/count is power of two, but i'm lazy :)
     uint32_t playPos   = getPlayPos();
-    uint32_t playIdx   = playPos / dmaBufferSize;
+
+    // small fixup for quirky devices which fire IRQ before actually playing entire buffer
+    uint32_t playIdx   = (playPos + (dmaBufferSize >> 6)) / dmaBufferSize;
+    if (playIdx >= dmaBufferCount) playIdx -= dmaBufferCount;
     dmaRenderPtr = (playIdx + 1) * dmaBufferSize;
     if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
 
     renderPos += dmaBufferSamples;
 
-    // adjust dma buffers, handle buffer wraparounds
+    // adjust play position
+#if 1
+    int32_t playpos = playPos / convinfo.bytesPerSample;
+    currentPos += (playpos < dmaCurrentPtr ? dmaBlockSamples + playpos - dmaCurrentPtr : playpos - dmaCurrentPtr);
+    dmaCurrentPtr = playpos;
+#else
     if (playPos < dmaCurrentPtr) {
         currentPos += dmaBlockSamples;
     }
     dmaCurrentPtr = playPos;
+#endif
 }
 
 uint32_t DmaBufferDevice::dmaBufferInit(uint32_t bufferSize, soundFormatConverterInfo *conv) {
@@ -541,24 +560,35 @@ uint32_t DmaBufferDevice::dmaBufferFree() {
     return SND_ERR_OK;
 }
 
+uint64_t DmaBufferDevice::getPos() {
+    if (!isPlaying) return 0;
+    
+    uint32_t timeout = 5;
+    uint64_t totalPos;
+    do {
+        volatile int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
+        volatile int32_t dmaptr  = dmaCurrentPtr;
+        //playpos = sndlib_clamp(playpos, 0, dmaBlockSamples - 1);
+        totalPos = currentPos + (playpos < dmaptr ? dmaBlockSamples + playpos - dmaptr : playpos - dmaptr);
+    } while ((--timeout != 0) && ((totalPos < oldTotalPos) || ((totalPos - oldTotalPos) >= dmaBufferSamples)));
+    if ((totalPos < oldTotalPos)) return oldTotalPos;   // give up but let the counter stop
+    
+    oldTotalPos = totalPos;
+    return totalPos;
+}
+
 IsaDmaDevice::IsaDmaDevice(const char* _name) : DmaBufferDevice(_name) {}
 
-uint64_t IsaDmaDevice::getPos() {
-    if (isPlaying) {
-        volatile uint64_t totalPos = 0; uint32_t timeout = 300;
-        // quick and dirty rewind bug fix :D
-        do {
-            totalPos = currentPos + (getPlayPos() / convinfo.bytesPerSample);
-        } while ((totalPos < oldTotalPos) && (--timeout != 0));
-        oldTotalPos = totalPos;
-        return totalPos;
-    }
-    else return 0;
+uint32_t IsaDmaDevice::getPlayPos() {
+    int32_t pos = ((int32_t)(dmaGetCurrentAddress(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0)) - (int32_t)(((uint32_t)dmaBlock.ptr) & 0xFFFF));
+    return pos;
+    //return sndlib_clamp(pos, 0,  (int32_t)(dmaBlockSize - 1));
+    //return dmaBlockSize - (((dmaGetCurrentCount(dmaChannel, false) + 1) & 0xFFFF) << (dmaChannel >= 4 ? 1 : 0));
 }
 
-uint32_t IsaDmaDevice::getPlayPos() {
-    return (dmaBlockSize - (dmaGetPos(dmaChannel, false) << (dmaChannel >= 4 ? 1 : 0)));
-}
+#undef sndlib_min
+#undef sndlib_max
+#undef sndlib_clamp
 
 // IRQ procedures
 

@@ -187,6 +187,9 @@ class DmaBufferDevice : public SoundDevice {
 public:
     DmaBufferDevice(const char* _name, uint32_t _infoPrivateBufSize = 64);
 
+    // get playback position in samples
+    virtual uint64_t getPos();
+
 protected:
 
     // -------------------------- DMA stuff ------------------------
@@ -243,9 +246,6 @@ protected:
 class IsaDmaDevice : public DmaBufferDevice {
 public:
     IsaDmaDevice(const char* _name);
-
-    // get playback position in samples
-    virtual uint64_t getPos();
 
 protected:
 
