@@ -25,7 +25,7 @@ A        = asm
 AS       = nasm.exe
 CC       = wpp386.exe
 LD       = wlink.exe
-CFLAGS   = -5r -fp5 -fpi87 -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I=$(MP2DEC_PATH);$(SNDLIB_PATH) -DDEBUG_RASTER=$(RASTER)
+CFLAGS   = -5r -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I=$(MP2DEC_PATH);$(SNDLIB_PATH) -DDEBUG_RASTER=$(RASTER)
 LFLAGS   =
 AFLAGS   = -f win32
 
