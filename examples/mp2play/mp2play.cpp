@@ -10,6 +10,7 @@ bool mp2play::play(uint64_t pos) {return false;}
 bool mp2play::decode(uint32_t frames) {return false;}
 
 bool mp2play::pause() {return false;}
+bool mp2play::setPos(double pos) {return true;}
 
 bool mp2play::resume() {return false;}
 

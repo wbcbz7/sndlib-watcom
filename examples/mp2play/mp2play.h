@@ -2,8 +2,6 @@
 
 #include <stdint.h>
 
-#include "mp2dec.h"
-
 class mp2play {
 
 public:
@@ -34,6 +32,7 @@ public:
 
     // get position (+/- 20 samples accurate, i dunno, what about RTC interpolation?)
     virtual int64_t  getPos();
+    virtual bool     setPos(double pos);
 
     // get sample rate
     virtual uint32_t getSampleRate();
