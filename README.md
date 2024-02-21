@@ -7,11 +7,11 @@ current features:
 * broad sound device support (from tiny PC Honker, Covox and Sound Blaster cards to HD Audio codecs, see below for the full list)
 * easy API (comparable to other audio libraries, like PortAudio)
 * IRQ0 free! (except for Covox and PC Speaker, of course)
-* high compatibility with any DOS environments, from pure DOS to Windows 9x.
+* high compatibility with various DOS environments, from pure DOS to Windows 9x, including sound card emulators like SBEMU.
 * comes with a couple of examples (background .wav and MP2 players)
 * still not quite stable :)
 
---wbcbz7 16.o8.2o22
+--wbcbz7 16.o8.2o22 - 21.o2.2o24
 
 
 
@@ -427,6 +427,8 @@ First, if paging is enabled (VCPI/DPMI hosts are known for this), then physical 
 sndlib workarounds this by allocating sound buffer and necessary descriptors in low memory; in single-tasking systems this seems to work fine.
 
 Second, memory coherency issues are becoming important. PCI systems handle this fine, but in some environments (like PCIe systems), we have to handle unusual stuff like PCIe traffic classes, snooping, etc. 
+
+Third, there are sound card emulators for pure DOS, like [SBEMU](https://github.com/crazii/SBEMU/), which perform real-time emulation of legacy audio devices like AdLib or Sound Blaster 16 via PCI sound hardware. sndlib, by its nature, works directly with sound hardware, and this may interfere with normal operation of emulator. To work around these issues, sndlib tries to detect if such emulator is present in memory, and skips probing for PCI sound cards.
 
 tl;dr: should work under raw/XMS environments, and probably VCPI (paging enabled) as well. Native DOS DPMI clients like CWSDPMI/HDPMI32 are also fine, whereas multitaskers like Windows would fail.
 
