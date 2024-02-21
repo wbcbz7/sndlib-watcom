@@ -38,6 +38,35 @@ uint32_t sndlibDone() {
     return SND_ERR_OK;   
 }
 
+// detect for SBEMU, returns ITN 2D multiplex or -1 if not found
+static uint32_t sndlib_sbemu_detect() {
+    uint8_t* amis_appstring;
+    uint32_t ret_seg = 0, ret_ofs = 0;
+
+    // scan all multiplexes of INT 2D
+    for (int mx = 0; mx < 256; mx++) {
+        _asm {
+                mov     ah, byte ptr [mx]
+                xor     al, al
+                int     0x2d
+                cmp     al, 0xFF        // is this a free multiplex?
+                jz      _found
+                xor     dx, dx          // it is, return NULL pointer
+                xor     di, di
+            _found:
+                mov     word ptr [ret_seg], dx
+                mov     word ptr [ret_ofs], di
+        }
+
+        // check for SBEMU application string
+        amis_appstring = (uint8_t*)((ret_seg << 4) + ret_ofs);  // FIXME: assumes Watcom C zero-based flat model
+        if ((amis_appstring != NULL) && (memcmp(amis_appstring+8, "SBEMU", 5) == 0)) return mx;
+    }
+
+    // TODO: implement
+    return -1;
+}
+
 // this is SLOW (if not done via lookup), but it can't be helped right now
 SoundDevice* sndlibCreateSpecificDevice(uint32_t id) {
     switch(id) {
@@ -117,6 +146,11 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
     // else we have to query each driver for supported devices
     uint32_t selection = ((flags & SND_CREATE_DEVICE_MASK) == SND_CREATE_DEVICE_AUTO_DETECT) ? 0 : -1;
 
+    // check for SBEMU running
+    // in this case, do not probe PCI devices to avoid screwing things up
+    uint32_t sbemu_multiplex = sndlib_sbemu_detect();
+    printf("SBEMU multiplex = %d\n", sbemu_multiplex);
+
     // probe devices array
     SoundDevice * probeDevices[SND_TOTAL_DEVICES];
     uint32_t probeDeviceIdx = 0;
@@ -146,7 +180,12 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
         if ((flags & SND_CREATE_SKIP_NONDMA_DEVICES) &&
             (id <  SND_CREATE_DEVICE_NONDMA_LAST) && 
             (id >= SND_CREATE_DEVICE_NONDMA_FIRST)) continue;
-        
+
+        // filter out PCI devices if SBEMU is running
+        if ((sbemu_multiplex != -1) &&
+            (id >= SND_CREATE_DEVICE_PCI_FIRST) &&
+            (id <  SND_CREATE_DEVICE_PCI_LAST)) continue;
+
         // request specific device
         probeDevices[probeDeviceIdx] = sndlibCreateSpecificDevice(id);
 
@@ -167,7 +206,7 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
     if ((flags & SND_CREATE_DEVICE_MASK) != SND_CREATE_DEVICE_AUTO_DETECT) {
         printf(" select available sound device: \n");
         for (size_t i = 0; i < probeDeviceIdx; i++) {
-            printf(" %c - %s (%s)\n",
+            printf(" %c - %-25s (%s)\n",
                 (i >= 10 ? (i - 10 + 'A') : (i + '0')),
                 probeDevices[i]->getDeviceInfo()->name,
                 probeDevices[i]->getDeviceInfo()->version
