@@ -357,7 +357,28 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
   - if IRQ/DMA is unknown, current IRQ/DMA settings are read from mixer registers 0x80/81.
   - the rest is done as for SB 2.x/Pro driver
 
-### 3. Windows Sound System, GUS MAX/PnP
+### 3. Gravis Ultrasound (GF1)
+
+- **sample rates:**  practically any, limited in sndlib to 4..48 kHz range
+
+- **sample bit depth**: 8/16 bits unsigned/signed
+
+- **sample channels:** mono (stereo needs hacks, see below)
+
+- **HW resources:** one I/O range, one IRQ, one DMA channel
+
+  (ab)using the GF1 wavetable synthesizer to play streaming audio. Since GF1 allows audio data to be uploaded via DMA (with optional sign conversion), this works as seamless and transparent as it could be, although there is enough troubles and quirks to work around with.
+
+  mono playback seems to work more or less well under DOSBox, stereo is yet to be implemented. Since GF1 can't play interleaved stereo samples, and the DMA unit can't de-interleave them during upload, it has to be done by the CPU, plus some sort of IRQ-driven queue for DMA upload needs to be implemented (we don't wait to stall the entire system while uploading data :). Another option is to use so-called 2.0 pitch trick (documented in GUS SDK) + the fact GF1 can't handle more than 14 channels at 44100 Hz, so it's possible to tweak playback rate to the list of fixed rates in the 19-44 kHz range. 
+
+  Either way, this driver is recommended to be used on classic GUS or GUS Ace only, MAX/PnP should work better with WSS driver (still not tested on those cards)
+
+  `detect()` first reads settings from ULTRASND variable, then:
+
+  - if IO base address is unknown, common IO ranges (0x220...0x280) are probed for GF1 presence. if GF1 reset/detection success, current IO base address is saved
+  - if IRQ/DMA is unknown, current IRQ/DMA settings are read from register 2xB
+
+### 4. Windows Sound System, GUS MAX/PnP
 
 - **sample rates:**  fixed set of rates, generally in 8..48 kHz range
 
@@ -379,7 +400,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
   - if DMA is unknown, for each DMA channel, short silent buffer is played back. if DMA counter for given channel is changed, then this DMA channel is assumed to be used by the sound card.
   - if IRQ is unknown, short buffer is played back again, then each possible IRQ is tested. Note that it can result in false positives if other cards (network/SCSI/whatever) are installed in the system.
 
-### 4. ESS AudioDrive
+### 5. ESS AudioDrive
 
 - **sample rates:**  4..48 kHz 
 
@@ -399,7 +420,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
   - if IRQ/DMA is unknown, current IRQ/DMA settings are read from ESS enhanced registers.
   - the rest is done as for SB 2.x/Pro driver
 
-### 5.Pro Audio Spectrum / PAS+ / PAS16
+### 6.Pro Audio Spectrum / PAS+ / PAS16
 
 - **sample rates:**  4..48 kHz 
 
@@ -415,7 +436,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
 ### ...future plans
 
-- original Gravis Ultrasound via GF1 onboard RAM
+- ~~original Gravis Ultrasound via GF1 onboard RAM~~ work in progress
 - anyway idk, current ISA driver support covers perhaps 95% of all ISA sound cards :)
 
 ## c. PCI devices
