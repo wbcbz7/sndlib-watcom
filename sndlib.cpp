@@ -91,6 +91,9 @@ SoundDevice* sndlibCreateSpecificDevice(uint32_t id) {
 #ifdef SNDLIB_DEVICE_ENABLE_SB16
         case SND_CREATE_DEVICE_SB16:        return new sndSoundBlaster16();
 #endif
+#ifdef SNDLIB_DEVICE_ENABLE_GUS
+        case SND_CREATE_DEVICE_GUS:         return new sndGravisUltrasound();
+#endif
 #ifdef SNDLIB_DEVICE_ENABLE_WSS
         case SND_CREATE_DEVICE_WSS:         return new sndWindowsSoundSystem();
 #endif
@@ -149,7 +152,9 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
     // check for SBEMU running
     // in this case, do not probe PCI devices to avoid screwing things up
     uint32_t sbemu_multiplex = sndlib_sbemu_detect();
-    printf("SBEMU multiplex = %d\n", sbemu_multiplex);
+#ifdef DEBUG_LOG
+    logdebug("SBEMU multiplex = %d\n", sbemu_multiplex);
+#endif
 
     // probe devices array
     SoundDevice * probeDevices[SND_TOTAL_DEVICES];
@@ -163,8 +168,9 @@ uint32_t sndlibCreateDevice(SoundDevice **device, uint32_t flags) {
         SND_CREATE_DEVICE_SB16,
         SND_CREATE_DEVICE_WSS,
         SND_CREATE_DEVICE_ESS,
-        SND_CREATE_DEVICE_PAS,
         SND_CREATE_DEVICE_SB,
+        SND_CREATE_DEVICE_GUS,
+        SND_CREATE_DEVICE_PAS,
 
         SND_CREATE_DEVICE_STEREO_ON_1,
         SND_CREATE_DEVICE_DUAL_COVOX,

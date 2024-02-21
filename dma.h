@@ -48,8 +48,8 @@ bool dmaAlloc(size_t len, dmaBlock *blk);
 bool dmaAllocUnaligned(size_t len, dmaBlock *blk);
 bool dmaFree(dmaBlock *blk);
 
-// setup DMA for transfer and start it
-bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode);
+// setup DMA for transfer and start it (TODO: fix API)
+bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode, uint32_t offset = 0);
 
 // pause/resume transfer
 bool dmaPause(size_t chan);

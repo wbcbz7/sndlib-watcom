@@ -206,7 +206,7 @@ protected:
     uint32_t        dmaChannel;                 // sometimes different formats require different DMA channels (hey SB16)
     
     dmaBlock        dmaBlock;
-    uint32_t        dmaBlockSize;
+    uint32_t        dmaBlockSize;               // size in bytes!
     uint32_t        dmaBlockSamples;            // size in samples
     
     uint32_t        dmaBufferCount;             // num of buffers inside one block

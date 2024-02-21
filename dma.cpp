@@ -102,7 +102,7 @@ bool dmaFree(dmaBlock *blk) {
     return true;
 }
 
-bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode) {
+bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode, uint32_t offset) {
     
     if ((chan == 4) || (chan > 7)) {
         logerr("channel number must be for 0 to 7 (excluding 4)\n");
@@ -130,7 +130,8 @@ bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode) {
     outp(dmaPorts[chan].mode,    mode | rawchan);
     
     // apparently high DMAs require some shifting to make it work
-    size_t rawptr = (size_t)blk->ptr >> (chan >= 4 ? 1 : 0);
+    size_t rawptr = (size_t)blk->ptr + offset;
+           rawptr = rawptr           >> (chan >= 4 ? 1 : 0);
     size_t rawlen = (len             >> (chan >= 4 ? 1 : 0)) - 1;
     size_t rawpage =(size_t)blk->ptr >> 16;
     

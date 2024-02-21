@@ -19,7 +19,7 @@ LFLAGS   =
 
 # add object files here
 OBJS     = sndlib.obj convert.obj dma.obj dpmi.obj tinypci.obj irq.obj logerror.obj sndmisc.obj
-OBJS     = $(OBJS) snddev.obj devsb.obj devwss.obj devpas.obj devhda.obj devhonk.obj devhonka.obj devds1.obj
+OBJS     = $(OBJS) snddev.obj devgus.obj devsb.obj devwss.obj devpas.obj devhda.obj devhonk.obj devhonka.obj devds1.obj
 
 OBJLIST  = $(OBJS)
 OBJSTR   = file {$(OBJLIST)}

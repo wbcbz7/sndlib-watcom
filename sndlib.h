@@ -51,6 +51,7 @@ enum {
     SND_CREATE_DEVICE_ISA_DMA_FIRST = 0x1100,
     SND_CREATE_DEVICE_SB            = SND_CREATE_DEVICE_ISA_DMA_FIRST,
     SND_CREATE_DEVICE_SB16,
+    SND_CREATE_DEVICE_GUS,
     SND_CREATE_DEVICE_WSS,
     SND_CREATE_DEVICE_ESS,
     SND_CREATE_DEVICE_PAS,
@@ -68,6 +69,9 @@ enum {
      defined(SNDLIB_DEVICE_ENABLE_SB16) ||  \
      defined(SNDLIB_DEVICE_ENABLE_ESS))
 #include "devsb.h"
+#endif
+#if defined(SNDLIB_DEVICE_ENABLE_GUS)
+#include "devgus.h"
 #endif
 #if defined(SNDLIB_DEVICE_ENABLE_WSS)
 #include "devwss.h"
