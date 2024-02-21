@@ -340,9 +340,16 @@ bool sndGravisUltrasound::gusDetect(SoundDevice::deviceInfo* info, bool manualDe
 
     // init format caps for GUS
     info->caps = gusCaps;
+    info->maxBufferSize = 32768;    // BYTES
     info->capsLen = arrayof(gusCaps);
     info->name = "Gravis Ultrasound";
-    info->version = "GF1";
+    snprintf(
+        info->privateBuf,
+        info->privateBufSize,
+        "A%03X/I%d/D%d",
+        info->iobase, info->irq, info->dma
+    );
+    info->version = info->privateBuf;
     info->flags = 0;
 
     // detected! :)
@@ -461,7 +468,29 @@ uint32_t sndGravisUltrasound::open(uint32_t sampleRate, soundFormat fmt, uint32_
     // we have all relevant info for opening sound device, do it now
 
     // allocate DMA buffer (overcommit for anticlick)
-    if ((result = dmaBufferInit(bufferSize + 128, conv)) != SND_ERR_OK) return result;
+    {
+        // premultiply bufferSize by bytesPerSample
+        bufferSize *= conv->bytesPerSample;
+        
+        // check for bufsize
+        if (bufferSize > devinfo.maxBufferSize) bufferSize = devinfo.maxBufferSize;
+        
+        // save dma info
+        dmaChannel = devinfo.dma;
+        dmaBufferCount = 2;
+        dmaBufferSize = bufferSize;
+        dmaBlockSize = dmaBufferSize * 2;
+        dmaCurrentPtr = dmaRenderPtr = 0;
+        dmaBufferSamples = dmaBufferSize / conv->bytesPerSample;
+        dmaBlockSamples  = dmaBlockSize  / conv->bytesPerSample;
+
+        // allocate DMA buffer
+        if (dmaBlock.ptr != NULL) if (dmaFree(&dmaBlock) == false) return SND_ERR_MEMALLOC;
+        if (dmaAlloc(dmaBlockSize + 128, &dmaBlock) == false) return SND_ERR_MEMALLOC;
+        
+        // lock DPMI memory for buffer
+        dpmi_lockmemory(dmaBlock.ptr, dmaBlockSize+128+64);
+    }
 
     // install IRQ handler
     if ((result = installIrq()) != SND_ERR_OK) return result;
@@ -573,13 +602,13 @@ uint32_t sndGravisUltrasound::convertAndUpload(uint32_t samples, uint32_t gusofs
             case callbackAbort      : 
             default : return SND_ERR_NO_DATA;
         }
-        renderPos += dmaBufferSamples;
+        renderPos += samples;
         sample_bytes_to_render_last = bytes_to_render;
     }
 
     // setup and start GF1 DMA transfer
     dmaSetup(dmaChannel, &dmaBlock, bytes_to_render + convinfo.bytesPerSample, dmaModeRead | dmaModeSingle | dmaModeNoAutoInit, dmablk_offset[0]);
-    uint8_t dmactrl = dmactrl | (dmaChannel >= 4 ? 4 : 0);
+    uint8_t dmactrl = this->dmactrl | (dmaChannel >= 4 ? 4 : 0);
     gf1_write (devinfo.iobase, -1, 0x41, dmactrl);
     gf1_writew(devinfo.iobase, -1, 0x42, (channel_offset[0] + gusofs) >> (dmaChannel >= 4 ? 5 : 4));
     gf1_write (devinfo.iobase, -1, 0x41, dmactrl | 1);   // start DMA transfer!
@@ -713,6 +742,16 @@ void sndGravisUltrasound::irqAdvancePos() {
 }
 #endif
 
+static void sndlib_swapStacks();
+#pragma aux sndlib_swapStacks = \
+    " mov     word  ptr   [snddev_pm_old_stack + 4], ss   " \
+    " mov     dword ptr   [snddev_pm_old_stack + 0], esp  " \
+    " lss     esp, [snddev_pm_stack_top] "
+
+static void sndlib_restoreStack();
+#pragma aux sndlib_restoreStack = \
+    " lss     esp, [snddev_pm_old_stack] "
+
 // irq procedure
 bool sndGravisUltrasound::irqProc() {
     // get GUS interrupt status
@@ -739,8 +778,35 @@ bool sndGravisUltrasound::irqProc() {
         gf1_writew(devinfo.iobase, 0, 0x5, pcmloop & 0xFFFF);
         gf1_pcm_set_rollover(devinfo.iobase, 0, buffer_half == 0);
 
-        // render more sound data
-        convertAndUpload(dmaBufferSamples, (buffer_half ? 0 : dmaBufferSamples), false);
+#if 1
+        // STACK POPIERDOLOLO
+        if (snddev_pm_stack_in_use == 0) {
+            snddev_pm_stack_in_use++;
+
+            static uint32_t samplesToRender;
+            samplesToRender = dmaBufferSamples;
+            static uint32_t bufferPos; 
+            bufferPos = (buffer_half ? 0 : dmaBufferSize);
+
+            // enable interrupts
+            _enable();
+
+            // switch stack
+            sndlib_swapStacks();
+
+            // render more sound data
+            convertAndUpload(samplesToRender, bufferPos, false);
+
+            // switch back
+            sndlib_restoreStack();
+
+            // and disable interrupts again
+            _disable();
+
+            snddev_pm_old_stack = NULL;
+            snddev_pm_stack_in_use--;
+        }
+#endif
     }
     if (irqstatus & (1 << 7)) {
         // DMA TC interrupt

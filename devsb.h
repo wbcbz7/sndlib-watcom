@@ -89,8 +89,8 @@ protected:
     // fill info according to DSP version
     virtual uint32_t    fillDspInfo(SoundDevice::deviceInfo *info, uint32_t sbDspVersion);
     
-    // convert DSP version to string
-    virtual const char* dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
+    // convert info to string
+    virtual const char* devinfoToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
     
     // --------------------------- IRQ stuff --------------------
     
@@ -230,6 +230,9 @@ private:
     // get IRQ/DMA configuration
     virtual uint32_t fillIrqDma(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);
 
+    // convert info to string
+    virtual const char* devinfoToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
+
     virtual bool    irqProc();
 
     // get start command
@@ -307,8 +310,8 @@ private:
     // get IRQ/DMA configuration
     virtual uint32_t fillIrqDma(SoundDevice::deviceInfo* info, uint32_t sbDspVersion);
 
-    // convert DSP version to string
-    virtual const char* dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
+    // convert info to string
+    virtual const char* devinfoToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion);
 
     virtual bool    irqProc();
 

@@ -710,7 +710,7 @@ uint32_t sndCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base address in private buffer
-    snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X", info->iobase);
+    snprintf(info->privateBuf, info->privateBufSize, "A%03X", info->iobase);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;
@@ -768,7 +768,7 @@ uint32_t sndDualCovox::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base  address in private buffer
-    snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X/0x%03X", info->iobase, info->iobase2);
+    snprintf(info->privateBuf, info->privateBufSize, "A%03X/%03X", info->iobase, info->iobase2);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;
@@ -833,7 +833,7 @@ uint32_t sndStereoOn1::fillCodecInfo(SoundDevice::deviceInfo* info) {
     info->flags         = SND_DEVICE_IRQ0 | SND_DEVICE_CLOCKDRIFT;
 
     // put IO base address in private buffer
-    snprintf(info->privateBuf, info->privateBufSize, "port 0x%03X", info->iobase);
+    snprintf(info->privateBuf, info->privateBufSize, "A%03X", info->iobase);
     info->version = info->privateBuf;
 
     return SND_ERR_OK;

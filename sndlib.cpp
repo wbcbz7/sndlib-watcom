@@ -38,10 +38,13 @@ uint32_t sndlibDone() {
     return SND_ERR_OK;   
 }
 
-// detect for SBEMU, returns ITN 2D multiplex or -1 if not found
+// detect for SBEMU, returns INT 2D multiplex or -1 if not found
 static uint32_t sndlib_sbemu_detect() {
     uint8_t* amis_appstring;
     uint32_t ret_seg = 0, ret_ofs = 0;
+
+    // check for INT2D vector == NULL
+    if (dpmi_getrmvect(0x2D) == NULL) return -1;
 
     // scan all multiplexes of INT 2D
     for (int mx = 0; mx < 256; mx++) {

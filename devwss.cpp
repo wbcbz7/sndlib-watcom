@@ -635,6 +635,18 @@ bool sndWindowsSoundSystem::getCodecVersion(SoundDevice::deviceInfo* info)
         break;
     }
 
+    // append resource info (kludge!!!!!!)
+    char tempstr[128]; memset(tempstr, 0, sizeof(tempstr));
+    strncpy(tempstr, info->version, sizeof(tempstr));
+    snprintf(
+        info->privateBuf,
+        info->privateBufSize,
+        "A%03X/I%d/D%d, %s",
+        info->iobase, info->irq, info->dma,
+        tempstr
+    );
+    info->version = info->privateBuf;
+
     return true;
 }
 

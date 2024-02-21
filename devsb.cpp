@@ -477,8 +477,14 @@ uint32_t sndSBBase::fillDspInfo(SoundDevice::deviceInfo * info, uint32_t sbDspVe
     return 0;
 }
 
-const char* sndSBBase::dspVerToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion) {  
-    snprintf(info->privateBuf, info->privateBufSize, "DSP v.%d.%02d\0", (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF);
+const char* sndSBBase::devinfoToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion) {  
+    snprintf(
+        info->privateBuf,
+        info->privateBufSize,
+        "A%03X/I%d/D%d, DSP v.%d.%02d\0",
+        info->iobase, info->irq, info->dma,
+        (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF
+    );
     info->version = info->privateBuf;
     return info->version;
 }
@@ -669,7 +675,7 @@ uint32_t sndSoundBlaster::detect(SoundDevice::deviceInfo *info) {
     if (this->dspVersion == 0) return SND_ERR_NOTFOUND;
 
     // fill DSP version
-    dspVerToString(&this->devinfo, this->dspVersion);
+    devinfoToString(&this->devinfo, this->dspVersion);
     
     // copy info if not NULL
     if (info != NULL) *info = devinfo;
@@ -938,7 +944,7 @@ uint32_t sndSoundBlaster16::detect(SoundDevice::deviceInfo *info) {
     if (this->dspVersion < 0x400) return SND_ERR_NOTFOUND;
 
     // fill DSP version
-    dspVerToString(&this->devinfo, this->dspVersion);
+    devinfoToString(&this->devinfo, this->dspVersion);
 
     // copy info if not NULL
     if (info != NULL) *info = devinfo;
@@ -1109,6 +1115,19 @@ uint32_t sndSoundBlaster16::getStartCommand(soundFormatConverterInfo & conv)
     return (uint16_t)((mode << 8) | cmd);
 }
 
+const char* sndSoundBlaster16::devinfoToString(SoundDevice::deviceInfo * info, uint32_t sbDspVersion)
+{
+    snprintf(
+        info->privateBuf,
+        info->privateBufSize,
+        "A%03X/I%d/D%d/H%d, DSP v.%d.%02d\0",
+        info->iobase, info->irq, info->dma, info->dma2,
+        (sbDspVersion >> 8) & 0xFF, sbDspVersion & 0xFF
+    );
+    info->version = info->privateBuf;
+    return info->version;
+}
+
 #endif
 
 #ifdef SNDLIB_DEVICE_ENABLE_ESS
@@ -1202,7 +1221,7 @@ uint32_t sndESSAudioDrive::detect(SoundDevice::deviceInfo* info) {
     if ((this->dspVersion < 0x200) || (this->dspVersion >= 0x400)) return SND_ERR_NOTFOUND;
 
     // fill DSP version
-    dspVerToString(&this->devinfo, this->dspVersion);
+    devinfoToString(&this->devinfo, this->dspVersion);
 
     // copy info if not NULL
     if (info != NULL) *info = devinfo;
@@ -1432,9 +1451,14 @@ bool sndESSAudioDrive::irqProc() {
     return false;   // we're handling EOI by itself
 }
 
-const char* sndESSAudioDrive::dspVerToString(SoundDevice::deviceInfo * info, uint32_t ver)
+const char* sndESSAudioDrive::devinfoToString(SoundDevice::deviceInfo * info, uint32_t ver)
 {
-    snprintf(info->privateBuf, info->privateBufSize, "ESS%0X, rev. %d", modelNumber, modelId & 0xF);
+    snprintf(
+        info->privateBuf,
+        info->privateBufSize,
+        "A%03X/I%d/D%d, ESS%0X, rev. %d",
+        info->iobase, info->irq, info->dma,
+        modelNumber, modelId & 0xF);
     info->version = info->privateBuf;
     return info->version;
 }

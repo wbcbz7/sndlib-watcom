@@ -122,7 +122,7 @@ protected:
     virtual uint32_t convertAndUpload(uint32_t samples, uint32_t gusofs, bool first);
 
     // returns play position within DMA buffer in bytes
-    int32_t getPlayPos();
+    virtual int32_t getPlayPos();
 
     // ------------------------- playback stuff -----------------
 
