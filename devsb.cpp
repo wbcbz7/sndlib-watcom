@@ -160,6 +160,7 @@ uint32_t sbDspRead(uint32_t base) {
 }
 #pragma aux sbDspRead parm routine [] value [eax]
 
+#if defined(SNDLIB_DEVICE_ENABLE_ESS)
 void essRegWrite(uint32_t base, uint8_t reg, uint8_t data) {
     sbDspWrite(base, reg); sbDspWrite(base, data);
 #ifdef DEBUG_LOG
@@ -176,6 +177,7 @@ uint32_t essRegRead(uint32_t base, uint8_t reg) {
     return data;
 }
 #pragma aux essRegRead parm routine [] value [eax]
+#endif
 
 void sbMixerWrite(uint32_t base, uint8_t index, uint8_t data) {
     outp(base + 4, index); outp(base + 5, data);
@@ -226,6 +228,7 @@ uint32_t sbGetActualSampleRate(uint32_t tc, bool stereo) {
     return (1000000 / ((256 - tc) << (stereo ? 1 : 0)));
 }
 
+#if defined(SNDLIB_DEVICE_ENABLE_ESS)
 uint32_t essGetDivisor(uint32_t rate) {    
     if (rate < 4000) return 0; 
     return (rate > 22222) ? 256 - udivRound(795500, rate) : 128 - udivRound(397700, rate);
@@ -243,6 +246,7 @@ uint32_t ess1869GetDivisor(uint32_t rate) {
 uint32_t ess1869GetActualSampleRate(uint32_t tc) {
     return (tc >= 128 ? (768000 / (256 - tc)) : (793800 / (128 - tc)));
 }
+#endif
 #endif
 
 bool sbDspReset(uint32_t base) {
