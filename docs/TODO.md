@@ -10,6 +10,8 @@
     - hispeed mode: fix pause/resume (cmd 0xD4 doesn't work for hispeed transfers and 0x90 resets current transfer count, thus SB goes out of sync with i8237)
       possible solution: rewind i8237 to start of current DMA buffer, but it's complicated because if playing DMA buffer is not first in the DMA block (see glossary if your mind exploding right now :). we need to re-setup i8237 when the SB finishes to play last DMA buffer
 
+* position/buffer tracking code is a one big kludge - i8237 is so unreliable when it comes to reading current buffer position. seems to work for me, but if any issues occur, don't hesitate to report
+
 ### fixed:
 
  - high IRQs (8-15) doesn't work?

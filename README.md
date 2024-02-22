@@ -373,10 +373,7 @@ most ISA sound cards use one ISA DMA channel for sample transfers (in auto-init 
 
   Either way, this driver is recommended to be used on classic GUS or GUS Ace only, MAX/PnP should work better with WSS driver (still not tested on those cards)
 
-  `detect()` first reads settings from ULTRASND variable, then:
-
-  - if IO base address is unknown, common IO ranges (0x220...0x280) are probed for GF1 presence. if GF1 reset/detection success, current IO base address is saved
-  - if IRQ/DMA is unknown, current IRQ/DMA settings are read from register 2xB
+  `detect()` reads settings from ULTRASND variable. Since IRQ/DMA setting registers (2xB) seem to be write-only on classic GUS, they can't be used for detection, and manual probing is not implemented yet, so you MUST have valid ULTRASND variable or pass valid IRQ/DMA settings in `deviceInfo` structure, else device initialization will fail.
 
 ### 4. Windows Sound System, GUS MAX/PnP
 

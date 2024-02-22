@@ -156,12 +156,12 @@ static void gf1_clear_irq(uint32_t gusbase) {
 static void gf1_clear_channels(uint32_t gusbase) {
     // clear channels
     for (int ch = 0; ch < 32; ch++) {
-        gf1_write (gusbase, ch, 0x0, 3);             // voice ctrl - stop channel
-        gf1_write (gusbase, ch, 0xD, 3);             // volramp ctrl - stopped
-        gf1_write (gusbase, ch, 0x6, 0x3F);          // volramp rate - fastest (afaik)
-        gf1_write (gusbase, ch, 0xC, 7);             // pan position - center
-        gf1_writew(gusbase, ch, 0x1, 0x0000);        // freq ctrl    - pitch 0.0
-        gf1_writew(gusbase, ch, 0x9, 0x0000);        // current volume = 0
+        gf1_write_mod(gusbase, ch, 0x0, 3);             // voice ctrl - stop channel
+        gf1_write_mod(gusbase, ch, 0xD, 3);             // volramp ctrl - stopped
+        gf1_write    (gusbase, ch, 0x6, 0x3F);          // volramp rate - fastest (afaik)
+        gf1_write    (gusbase, ch, 0xC, 7);             // pan position - center
+        gf1_writew   (gusbase, ch, 0x1, 0x0000);        // freq ctrl    - pitch 0.0
+        gf1_writew   (gusbase, ch, 0x9, 0x0000);        // current volume = 0
     }
 }
 
@@ -170,14 +170,15 @@ static void gf1_setup_playback(uint32_t gusbase, uint32_t channel, uint32_t star
     uint32_t pcmloop  = (startOffset + length) << 9;
     
     // set address, do not start the channel for now
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_START_HIGH, pcmstart >> 16);
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_START_LOW,  pcmstart & 0xFFFF);
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_POS_HIGH,   pcmstart >> 16);
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_POS_LOW,    pcmstart & 0xFFFF);
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_END_HIGH,   pcmloop >> 16);
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_END_LOW,    pcmloop & 0xFFFF);
-    gf1_writew(gusbase, channel, GF1_REG_CHAN_FREQ,       0);   // update pitch later
-    gf1_write (gusbase, channel, GF1_REG_CHAN_CTRL,       is16Bit ? (1 << 2) : 0);
+    gf1_write_mod(gusbase, channel, GF1_REG_CHAN_CTRL,       0);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_START_HIGH, pcmstart >> 16);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_START_LOW,  pcmstart & 0xFFFF);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_POS_HIGH,   pcmstart >> 16);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_POS_LOW,    pcmstart & 0xFFFF);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_END_HIGH,   pcmloop >> 16);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_END_LOW,    pcmloop & 0xFFFF);
+    gf1_writew   (gusbase, channel, GF1_REG_CHAN_FREQ,       0);   // update pitch later
+    gf1_write_mod(gusbase, channel, GF1_REG_CHAN_CTRL,       is16Bit ? (1 << 2) : 0);
 }
 
 static void gf1_pcm_set_rollover(uint32_t gusbase, uint32_t channel, bool rollover) {
@@ -320,22 +321,23 @@ bool sndGravisUltrasound::gusDetect(SoundDevice::deviceInfo* info, bool manualDe
 #endif
 
     // get IRQ and DMA settings from GF1 registers
+    // TODO: are they write-only on classic GUS?
     if (info->dma == -1) {
-        static uint8_t gusdma[] = {-1, 1, 3, 5, 6, 7, 0, -1};
+        static int8_t gusdma[] = {-1, 1, 3, 5, 6, 7, 0, -1};
         outp(info->iobase + 0, inp(info->iobase + 0) & ~(1 << 6));
 
         // read DMA settings
-        info->dma = gusdma[(inp(info->iobase + 0xB) >> 3) & 7];
+        info->dma = gusdma[(inp(info->iobase + 0xB)) & 7];
     }
     if (info->irq == -1) {
-        static uint8_t gusdma[] = {-1, 9, 5, 3, 7, 11, 12, 15};
+        static int8_t gusirq[] = {-1, 9, 5, 3, 7, 11, 12, 15};
         outp(info->iobase + 0, inp(info->iobase + 0) |  (1 << 6));
 
         // read IRQ settings
-        info->dma = gusdma[(inp(info->iobase + 0xB)) & 7];
+        info->irq = gusirq[(inp(info->iobase + 0xB)) & 7];
     }
 
-    if ((info->dma == -1) && (info->irq == -1)) return false;
+    if ((info->dma == -1) || (info->irq == -1)) return false;
 
     // init format caps for GUS
     info->caps = gusCaps;
@@ -450,6 +452,10 @@ uint32_t sndGravisUltrasound::open(uint32_t sampleRate, soundFormat fmt, uint32_
     // check if format is supported
     if ((flags & SND_OPEN_NOCONVERT) == 0) {
         // conversion is allowed
+         // suggest mono if mono only
+        if ((fmt & SND_FMT_CHANNELS_MASK) > (devinfo.caps->format & SND_FMT_CHANNELS_MASK))
+            newFormat = (devinfo.caps->format & SND_FMT_CHANNELS_MASK) | (newFormat & ~SND_FMT_CHANNELS_MASK);
+            
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | SND_FMT_INT16 | SND_FMT_SIGNED;
@@ -642,8 +648,8 @@ uint32_t sndGravisUltrasound::start() {
     channel_offset[1]           = dmaBlockSize * 2;    // leave enough room for anticlick samples
     conv_buf_ptr[0]             = (uint8_t*)dmaBlock.ptr + 16;
     conv_buf_ptr[1]             = (uint8_t*)dmaBlock.ptr + 16 + dmaBufferSize + 16;
-    dmablk_offset[0]            = (conv_buf_ptr[0] - (uint8_t*)dmaBlock.ptr) - convinfo.bytesPerSample;
-    dmablk_offset[1]            = (conv_buf_ptr[1] - (uint8_t*)dmaBlock.ptr) - convinfo.bytesPerSample;
+    dmablk_offset[0]            = 16 - convinfo.bytesPerSample;
+    dmablk_offset[1]            = 16 + dmaBufferSize + 16 - convinfo.bytesPerSample;
     sample_bytes_to_render_last = 0;
     buffer_half = 0;
 

@@ -18,7 +18,7 @@ int __sndconvcall __declspec(naked) sndconv_memcpy(void *dst, void *src, uint32_
         // copy by dwords
         rep     movsd
 
-        // calculate remainder
+        // copy remainder
         mov     ecx, edx
         jcxz    _end
         rep     movsb
