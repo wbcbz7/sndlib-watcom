@@ -122,9 +122,9 @@ bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode, uint32
     
     // mask channel
     outp(dmaPorts[chan].mask,    0x04 | rawchan);
-    
+
     // clear flip-flop
-    inp(dmaPorts[chan].clear);
+    outp(dmaPorts[chan].clear,   0x00);
     
     // set mode
     outp(dmaPorts[chan].mode,    mode | rawchan);
@@ -141,7 +141,7 @@ bool dmaSetup(size_t chan, dmaBlock *blk, size_t len, unsigned char mode, uint32
     outp(dmaPorts[chan].page,     rawpage       & 0xFF);
     
     // clear flip-flop again
-    inp(dmaPorts[chan].clear);
+    outp(dmaPorts[chan].clear,   0x00);
     
     // set length
     outp(dmaPorts[chan].count,    rawlen       & 0xFF);
@@ -238,13 +238,13 @@ uint32_t dmaRead16bit(uint32_t reg, bool lockInts) {
 // return current address (A[15..0] for 8bit channels, A[16..1] for 16bit)
 uint32_t dmaGetCurrentAddress(uint32_t chan, bool lockInts) {
     // clear flip-flop
-    inp(dmaPorts[chan].clear);
+    outp(dmaPorts[chan].clear, 0x00);
     return dmaRead16bit(dmaPorts[chan].address, lockInts);
 }
 
 // return current count register value
 uint32_t dmaGetCurrentCount(uint32_t chan, bool lockInts) {
     // clear flip-flop
-    inp(dmaPorts[chan].clear);
+    outp(dmaPorts[chan].clear, 0x00);
     return dmaRead16bit(dmaPorts[chan].count, lockInts);
 }
