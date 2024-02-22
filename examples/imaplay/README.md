@@ -2,7 +2,7 @@
 
 plays IMA ADPCM-compressed .wav files. designed for 486 and early Pentiums.
 
-currently in alpha, plays stereo files fine, occasionally clicks on mono files, otherwise seems to be stable enough. use at own risk :) Note that .wav file is loaded in memory at once, trackloading is not added yet.
+currently in beta, plays mono and stereo files fine, seems to be stable enough. use at own risk :) Note that .wav file is loaded in memory at once, trackloading is not added yet.
 
 ~0.4% mono / 0.8% stereo CPU load on Pentium 100. my 486 motherboard is broken yet so I can't test on those machines. 
 

@@ -249,10 +249,7 @@ uint32_t SoundDevice::getConverter(soundFormat srcfmt, soundFormat dstfmt, sound
         }
         if (srcfmt & SND_FMT_STEREO) shift++;
         
-        // resolve proc by shift
-        shift = 2 - shift;
-        
-        conv->proc   = (shift < 0) ? &sndconv_memcpy_shl : &sndconv_memcpy;
+        conv->proc   = &sndconv_memcpy;
         conv->parm   = shift;
         conv->format = dstfmt;
         return SND_ERR_OK;

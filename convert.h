@@ -30,7 +30,6 @@ enum soundDeviceCallbackResult {
 // callback definition
 typedef soundDeviceCallbackResult(*soundDeviceCallback)(void* userPtr, void* buffer, uint32_t bufferSamples, soundFormatConverterInfo *fmt, uint64_t bufferPos);
 
-int __sndconvcall sndconv_memcpy_shl(void *dst, void *src, uint32_t length, uint32_t div, uint32_t);
 int __sndconvcall sndconv_memcpy(void *dst, void *src, uint32_t length, uint32_t div, uint32_t);
 
 #ifdef SNDLIB_CONVERT_ENABLE_ARBITRARY

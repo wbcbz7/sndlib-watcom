@@ -1,42 +1,37 @@
+#include <string.h>
 #include <stdio.h>
 #include <stdint.h>
 #include "convert.h"
 #include "snddefs.h"
 
+#if 1
 // 16bit stereo -> 16bit stereo
 int __sndconvcall __declspec(naked) sndconv_memcpy(void *dst, void *src, uint32_t length, uint32_t div, uint32_t) {
     _asm {
-        mov     eax, ecx
-        mov     ebx, ecx
+        xchg    ecx, edx
+        shl     edx, cl        // ecx = length << div
+
         mov     ecx, edx
-        shr     eax, cl
-        mov     edx, eax
-        shl     eax, cl
-        sub     ebx, eax
-        mov     ecx, edx
+        and     edx, 3
+        shr     ecx, 2
+        
+        // copy by dwords
         rep     movsd
 
         // calculate remainder
-        mov     ecx, ebx
+        mov     ecx, edx
         jcxz    _end
         rep     movsb
     _end:
         ret
     }
 }
-
-//
-int __sndconvcall __declspec(naked) sndconv_memcpy_shl(void *dst, void *src, uint32_t length, uint32_t div, uint32_t) {
-    _asm {
-        mov     ebx, ecx
-        mov     eax, ecx
-        mov     ecx, edx
-        shl     eax, cl
-        mov     ecx, eax
-        rep     movsd
-        ret
-    }
+#else 
+int __sndconvcall sndconv_memcpy(void *dst, void *src, uint32_t length, uint32_t div, uint32_t) {
+    memcpy(dst, src, length << div);
+    return 0;
 }
+#endif
 
 #ifdef SNDLIB_CONVERT_ENABLE_ARBITRARY
 
