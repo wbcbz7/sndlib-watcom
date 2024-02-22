@@ -124,6 +124,9 @@ protected:
     // returns play position within DMA buffer in bytes
     virtual int32_t getPlayPos();
 
+    // advance play/render pointers
+    //virtual void        irqAdvancePos();
+
     // ------------------------- playback stuff -----------------
 
     // GF1 DRAM size in bytes

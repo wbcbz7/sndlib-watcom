@@ -158,7 +158,6 @@ static void gf1_clear_channels(uint32_t gusbase) {
     for (int ch = 0; ch < 32; ch++) {
         gf1_write_mod(gusbase, ch, 0x0, 3);             // voice ctrl - stop channel
         gf1_write_mod(gusbase, ch, 0xD, 3);             // volramp ctrl - stopped
-        gf1_write    (gusbase, ch, 0x6, 0x3F);          // volramp rate - fastest (afaik)
         gf1_write    (gusbase, ch, 0xC, 7);             // pan position - center
         gf1_writew   (gusbase, ch, 0x1, 0x0000);        // freq ctrl    - pitch 0.0
         gf1_writew   (gusbase, ch, 0x9, 0x0000);        // current volume = 0
@@ -173,10 +172,11 @@ static void gf1_setup_playback(uint32_t gusbase, uint32_t channel, uint32_t star
     gf1_write_mod(gusbase, channel, GF1_REG_CHAN_CTRL,       0);
     gf1_writew   (gusbase, channel, GF1_REG_CHAN_START_HIGH, pcmstart >> 16);
     gf1_writew   (gusbase, channel, GF1_REG_CHAN_START_LOW,  pcmstart & 0xFFFF);
-    gf1_writew   (gusbase, channel, GF1_REG_CHAN_POS_HIGH,   pcmstart >> 16);
-    gf1_writew   (gusbase, channel, GF1_REG_CHAN_POS_LOW,    pcmstart & 0xFFFF);
+    gf1_writew_mod(gusbase, channel, GF1_REG_CHAN_POS_HIGH,   pcmstart >> 16);
+    gf1_writew_mod(gusbase, channel, GF1_REG_CHAN_POS_LOW,    pcmstart & 0xFFFF);
     gf1_writew   (gusbase, channel, GF1_REG_CHAN_END_HIGH,   pcmloop >> 16);
     gf1_writew   (gusbase, channel, GF1_REG_CHAN_END_LOW,    pcmloop & 0xFFFF);
+    gf1_write    (gusbase, channel, GF1_REG_CHAN_RAMP_RATE, 0x3F); // volramp rate - fastest (afaik)
     gf1_writew   (gusbase, channel, GF1_REG_CHAN_FREQ,       0);   // update pitch later
     gf1_write_mod(gusbase, channel, GF1_REG_CHAN_CTRL,       is16Bit ? (1 << 2) : 0);
 }
@@ -455,7 +455,7 @@ uint32_t sndGravisUltrasound::open(uint32_t sampleRate, soundFormat fmt, uint32_
          // suggest mono if mono only
         if ((fmt & SND_FMT_CHANNELS_MASK) > (devinfo.caps->format & SND_FMT_CHANNELS_MASK))
             newFormat = (devinfo.caps->format & SND_FMT_CHANNELS_MASK) | (newFormat & ~SND_FMT_CHANNELS_MASK);
-            
+
         // suggest 16bit mono/stereo, leave orig format for 8/16bit
         if ((fmt & SND_FMT_DEPTH_MASK) > SND_FMT_INT16) {
             newFormat = (fmt & (SND_FMT_CHANNELS_MASK)) | SND_FMT_INT16 | SND_FMT_SIGNED;
@@ -587,11 +587,12 @@ uint32_t sndGravisUltrasound::convertAndUpload(uint32_t samples, uint32_t gusofs
     uint32_t bytes_to_render = samples * convinfo.bytesPerSample;
 
     // copy overflow samples
-    if (!first)
+    if (!first) {
         memcpy( conv_buf_ptr[0] - convinfo.bytesPerSample,
                 conv_buf_ptr[0] + sample_bytes_to_render_last - convinfo.bytesPerSample,
                 convinfo.bytesPerSample);
-    
+    }
+
     // call callback to fill buffer with sound data
     {
         if (callback == NULL) return SND_ERR_NULLPTR;
@@ -619,7 +620,6 @@ uint32_t sndGravisUltrasound::convertAndUpload(uint32_t samples, uint32_t gusofs
 
 uint32_t sndGravisUltrasound::start() {
     uint32_t rtn = SND_ERR_OK;
-    if ((rtn = prefill()) != SND_ERR_OK) return rtn;
 
     // check if 16 bit transfer
     dmaChannel = devinfo.dma;
@@ -672,6 +672,9 @@ uint32_t sndGravisUltrasound::start() {
 
     // upload first two blocks of sound data
     convertAndUpload(dmaBlockSamples, 0, true);
+    // poll for DMA terminal count
+    uint32_t timeout = (1 << 16);
+    while (--timeout && ((gf1_read(devinfo.iobase, -1, GF1_REG_DMA_CTRL) & (1 << 6)) == 0));
 
     // reset vars
     currentPos = irqs = dmaCurrentPtr = 0; dmaRenderPtr = dmaBufferSize;
@@ -682,6 +685,7 @@ uint32_t sndGravisUltrasound::start() {
     // synchronoulsy put channels on play
     gf1_writew(devinfo.iobase, 0, GF1_REG_CHAN_FREQ, pitch);
     gf1_writew(devinfo.iobase, 1, GF1_REG_CHAN_FREQ, pitch);
+    // set volume
 
     // done! we're playing sound :)
     isPaused = false; isPlaying = true;
@@ -744,8 +748,9 @@ void sndGravisUltrasound::irqAdvancePos() {
 
     // adjust play position
     int32_t playpos = playPos / convinfo.bytesPerSample;
-    currentPos += (playpos < dmaCurrentPtr ? dmaBlockSamples + playpos - dmaCurrentPtr : playpos - dmaCurrentPtr);
-    dmaCurrentPtr = playpos;
+    if (playpos < dmaCurrentPtr) {
+        currentPos += dmaBlockSamples;
+    }    dmaCurrentPtr = playpos;
 }
 #endif
 
@@ -769,7 +774,8 @@ bool sndGravisUltrasound::irqProc() {
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
     // save GF1 chan/reg index
-    uint16_t regIndex = inpw(devinfo.iobase + 2);
+    uint8_t channel  = inp(devinfo.iobase + 2);
+    uint8_t regindex = inp(devinfo.iobase + 3);
 
     // check IRQ reason
     if (irqstatus & (1 << 5)) {
@@ -828,7 +834,8 @@ bool sndGravisUltrasound::irqProc() {
     }
     
     // restore GF1 chan/reg index
-    outpw(devinfo.iobase + 2, regIndex);
+    outp(devinfo.iobase + 2, channel);
+    outp(devinfo.iobase + 3, regindex);
 
     return false;   // we're handling EOI by itself
 }

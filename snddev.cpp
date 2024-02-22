@@ -511,10 +511,11 @@ void DmaBufferDevice::irqAdvancePos() {
     currentPos += (playpos < dmaCurrentPtr ? dmaBlockSamples + playpos - dmaCurrentPtr : playpos - dmaCurrentPtr);
     dmaCurrentPtr = playpos;
 #else
-    if (playPos < dmaCurrentPtr) {
+    int32_t playpos = playPos / convinfo.bytesPerSample;
+    if (playpos < dmaCurrentPtr) {
         currentPos += dmaBlockSamples;
     }
-    dmaCurrentPtr = playPos;
+    dmaCurrentPtr = playpos;
 #endif
 }
 
