@@ -445,7 +445,7 @@ uint32_t DmaBufferDevice::removeIrq() {
 
 static void sndlib_swapStacks();
 #pragma aux sndlib_swapStacks = \
-    " mov     word  ptr   [snddev_pm_old_stack + 4], ss   " \
+    " mov     dword ptr   [snddev_pm_old_stack + 4], ss   " \
     " mov     dword ptr   [snddev_pm_old_stack + 0], esp  " \
     " lss     esp, [snddev_pm_stack_top] "
 

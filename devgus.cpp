@@ -170,14 +170,14 @@ static void gf1_setup_playback(uint32_t gusbase, uint32_t channel, uint32_t star
     uint32_t pcmloop  = (startOffset + length) << 9;
     
     // set address, do not start the channel for now
-    gf1_writew(gusbase, channel, 0x2, pcmstart >> 16);
-    gf1_writew(gusbase, channel, 0x3, pcmstart & 0xFFFF);
-    gf1_writew(gusbase, channel, 0xA, pcmstart >> 16);
-    gf1_writew(gusbase, channel, 0xB, pcmstart & 0xFFFF);
-    gf1_writew(gusbase, channel, 0x4, pcmloop >> 16);
-    gf1_writew(gusbase, channel, 0x5, pcmloop & 0xFFFF);
-    gf1_writew(gusbase, channel, 0x1, 0);   // update pitch later
-    gf1_write (gusbase, channel, 0x0, is16Bit ? (1 << 2) : 0);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_START_HIGH, pcmstart >> 16);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_START_LOW,  pcmstart & 0xFFFF);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_POS_HIGH,   pcmstart >> 16);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_POS_LOW,    pcmstart & 0xFFFF);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_END_HIGH,   pcmloop >> 16);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_END_LOW,    pcmloop & 0xFFFF);
+    gf1_writew(gusbase, channel, GF1_REG_CHAN_FREQ,       0);   // update pitch later
+    gf1_write (gusbase, channel, GF1_REG_CHAN_CTRL,       is16Bit ? (1 << 2) : 0);
 }
 
 static void gf1_pcm_set_rollover(uint32_t gusbase, uint32_t channel, bool rollover) {
@@ -198,7 +198,6 @@ static void gf1_pcm_start(uint32_t gusbase, uint32_t channel, bool irq) {
     gf1_write_mod(gusbase, channel, 0, chanctrl);
 
     // start volume ramp to max (TODO: volume control)
-    gf1_write(gusbase, channel, 0x8, 0xFF);
     int volctrl = gf1_read(gusbase, channel, 0x8D);
     volctrl &= ~3;
     gf1_write_mod(gusbase, channel, 0xD, volctrl);
@@ -346,8 +345,8 @@ bool sndGravisUltrasound::gusDetect(SoundDevice::deviceInfo* info, bool manualDe
     snprintf(
         info->privateBuf,
         info->privateBufSize,
-        "A%03X/I%d/D%d",
-        info->iobase, info->irq, info->dma
+        "A%03X/I%d/D%d, %d kb DRAM",
+        info->iobase, info->irq, info->dma, dramsize >> 10
     );
     info->version = info->privateBuf;
     info->flags = 0;
@@ -544,22 +543,18 @@ uint32_t sndGravisUltrasound::close() {
 
 uint32_t sndGravisUltrasound::resume() {
     // resume playback
-    gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_FREQ, pitch);
-    if (convinfo.format & SND_FMT_STEREO) {
-        gf1_write(devinfo.iobase, 1, GF1_REG_CHAN_FREQ, pitch);
-    }
+    gf1_writew(devinfo.iobase, 0, GF1_REG_CHAN_FREQ, pitch);
+    gf1_writew(devinfo.iobase, 1, GF1_REG_CHAN_FREQ, pitch);
 
     isPaused = false;
-    return SND_ERR_RESUMED;
+    return SND_ERR_OK;
 }
 
 uint32_t sndGravisUltrasound::pause() {
     // pause playback
     // TODO: pausing at loop end boundary may result in voice IRQ storm!
-    gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_FREQ, 0);
-    if (convinfo.format & SND_FMT_STEREO) {
-        gf1_write(devinfo.iobase, 1, GF1_REG_CHAN_FREQ, 0);
-    }
+    gf1_writew(devinfo.iobase, 0, GF1_REG_CHAN_FREQ, 0);
+    gf1_writew(devinfo.iobase, 1, GF1_REG_CHAN_FREQ, 0);
 
     isPaused = true;
     return SND_ERR_OK;
@@ -642,27 +637,32 @@ uint32_t sndGravisUltrasound::start() {
     pitch = (convinfo.sampleRate << 10) / 44100;
     pitch = (pitch + 1) & ~1;   // fixup for LSB forced to 0
 
+    // fill internal GUS driver info
+    channel_offset[0]           = 0;
+    channel_offset[1]           = dmaBlockSize * 2;    // leave enough room for anticlick samples
+    conv_buf_ptr[0]             = (uint8_t*)dmaBlock.ptr + 16;
+    conv_buf_ptr[1]             = (uint8_t*)dmaBlock.ptr + 16 + dmaBufferSize + 16;
+    dmablk_offset[0]            = (conv_buf_ptr[0] - (uint8_t*)dmaBlock.ptr) - convinfo.bytesPerSample;
+    dmablk_offset[1]            = (conv_buf_ptr[1] - (uint8_t*)dmaBlock.ptr) - convinfo.bytesPerSample;
+    sample_bytes_to_render_last = 0;
+    buffer_half = 0;
+
     // set channels for PCM playback
     gf1_setup_playback(devinfo.iobase, 0, channel_offset[0], dmaBufferSamples, convinfo.format & SND_FMT_INT16);
     gf1_setup_playback(devinfo.iobase, 1, channel_offset[1], dmaBufferSamples, convinfo.format & SND_FMT_INT16);
     gf1_pcm_set_rollover(devinfo.iobase, 0, true);
     gf1_pcm_set_rollover(devinfo.iobase, 1, true);
 
-    // set panning
+    // set volume/panning
     if (convinfo.format & SND_FMT_STEREO) {
-        gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_PAN, 0);  // left
-        gf1_write(devinfo.iobase, 1, GF1_REG_CHAN_PAN, 15); // right
+        gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_RAMP_END, 0xF0);  // volume ramp target
+        gf1_write(devinfo.iobase, 1, GF1_REG_CHAN_RAMP_END, 0xF0);  // volume ramp target
+        gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_PAN, 0);          // left
+        gf1_write(devinfo.iobase, 1, GF1_REG_CHAN_PAN, 15);         // right
+    } else {
+        gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_RAMP_END, 0xFF);
+        gf1_write(devinfo.iobase, 0, GF1_REG_CHAN_PAN, 7);          // center (kind of)
     }
-
-    // fill internal GUS driver info
-    channel_offset[0]           = 0;
-    channel_offset[1]           = dmaBlockSize * 2;    // leave enough room for anticlick samples
-    dmablk_offset[0]            = 16 - convinfo.bytesPerSample;
-    dmablk_offset[1]            = 16 - convinfo.bytesPerSample + dmaBufferSize;
-    conv_buf_ptr[0]             = (uint8_t*)dmaBlock.ptr + 16;
-    conv_buf_ptr[1]             = (uint8_t*)dmaBlock.ptr + 16 + dmaBufferSize;
-    sample_bytes_to_render_last = 0;
-    buffer_half = 0;
 
     // upload first two blocks of sound data
     convertAndUpload(dmaBlockSamples, 0, true);
@@ -673,8 +673,9 @@ uint32_t sndGravisUltrasound::start() {
     // start PCM playback!
     gf1_pcm_start(devinfo.iobase, 0, true);
     if (convinfo.format & SND_FMT_STEREO) gf1_pcm_start(devinfo.iobase, 1, false);
-    gf1_writew(devinfo.iobase, 0, 0x1, pitch);
-    gf1_writew(devinfo.iobase, 1, 0x1, pitch);
+    // synchronoulsy put channels on play
+    gf1_writew(devinfo.iobase, 0, GF1_REG_CHAN_FREQ, pitch);
+    gf1_writew(devinfo.iobase, 1, GF1_REG_CHAN_FREQ, pitch);
 
     // done! we're playing sound :)
     isPaused = false; isPlaying = true;
@@ -698,20 +699,6 @@ uint32_t sndGravisUltrasound::stop() {
     return SND_ERR_OK;
 }
 
-int64_t sndGravisUltrasound::getPos() {
-    uint64_t totalPos;
-
-    // anti-rewind stuff removed since GF1 is probably not prone of it (unlike i8237!)
-    int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
-    int32_t dmaptr  = dmaCurrentPtr;
-    totalPos = currentPos + (playpos < dmaptr ? dmaBlockSamples + playpos - dmaptr : playpos - dmaptr);
-
-    if ((totalPos < oldTotalPos)) return oldTotalPos;   // give up but let the counter stop
-    oldTotalPos = totalPos;
-
-    return totalPos;
-}
-
 // returns play position in bytes
 int32_t sndGravisUltrasound::getPlayPos() {
     uint32_t high = 0;
@@ -726,6 +713,20 @@ int32_t sndGravisUltrasound::getPlayPos() {
 }
 
 #if 0
+int64_t sndGravisUltrasound::getPos() {
+    uint64_t totalPos;
+
+    // anti-rewind stuff removed since GF1 is probably not prone of it (unlike i8237!)
+    int32_t playpos = getPlayPos() / convinfo.bytesPerSample;
+    int32_t dmaptr  = dmaCurrentPtr;
+    totalPos = currentPos + (playpos < dmaptr ? dmaBlockSamples + playpos - dmaptr : playpos - dmaptr);
+
+    if ((totalPos < oldTotalPos)) return oldTotalPos;   // give up but let the counter stop
+    oldTotalPos = totalPos;
+
+    return totalPos;
+}
+
 void sndGravisUltrasound::irqAdvancePos() {
     // unlike i8237, GF1 is predictable enough to not have any of these annoying position quirks
     int32_t playPos   = getPlayPos();   // in bytes!
@@ -744,7 +745,7 @@ void sndGravisUltrasound::irqAdvancePos() {
 
 static void sndlib_swapStacks();
 #pragma aux sndlib_swapStacks = \
-    " mov     word  ptr   [snddev_pm_old_stack + 4], ss   " \
+    " mov     dword ptr   [snddev_pm_old_stack + 4], ss   " \
     " mov     dword ptr   [snddev_pm_old_stack + 0], esp  " \
     " lss     esp, [snddev_pm_stack_top] "
 
@@ -761,6 +762,9 @@ bool sndGravisUltrasound::irqProc() {
     // acknowledge interrupt
     outp(irq.info->picbase, 0x20); if (irq.info->flags & IRQ_SECONDARYPIC) outp(0x20, 0x20);
 
+    // save GF1 chan/reg index
+    uint16_t regIndex = inpw(devinfo.iobase + 2);
+
     // check IRQ reason
     if (irqstatus & (1 << 5)) {
         // voice interrupt
@@ -772,7 +776,7 @@ bool sndGravisUltrasound::irqProc() {
         gf1_read(devinfo.iobase, -1, 0x8F);
 
         // switch rollover and loop point
-        buffer_half ^= 1;
+        buffer_half = dmaRenderPtr >= dmaBufferSize ? 0 : 1;
         uint32_t pcmloop = (channel_offset[0] + (dmaBufferSamples << (buffer_half))) << 9;
         gf1_writew(devinfo.iobase, 0, 0x4, pcmloop >> 16);
         gf1_writew(devinfo.iobase, 0, 0x5, pcmloop & 0xFFFF);
@@ -783,10 +787,13 @@ bool sndGravisUltrasound::irqProc() {
         if (snddev_pm_stack_in_use == 0) {
             snddev_pm_stack_in_use++;
 
+            // work around possible SS:EBP addressing, as we're switching stacks now
+            static sndGravisUltrasound *staticSelf;
             static uint32_t samplesToRender;
+            static uint32_t gusDst;
+            staticSelf = this;
             samplesToRender = dmaBufferSamples;
-            static uint32_t bufferPos; 
-            bufferPos = (buffer_half ? 0 : dmaBufferSize);
+            gusDst = (buffer_half ? 0 : dmaBufferSize);
 
             // enable interrupts
             _enable();
@@ -795,7 +802,7 @@ bool sndGravisUltrasound::irqProc() {
             sndlib_swapStacks();
 
             // render more sound data
-            convertAndUpload(samplesToRender, bufferPos, false);
+            staticSelf->convertAndUpload(samplesToRender, gusDst, false);
 
             // switch back
             sndlib_restoreStack();
@@ -814,6 +821,9 @@ bool sndGravisUltrasound::irqProc() {
         gf1_write(devinfo.iobase, -1, 0x41, gf1_read(devinfo.iobase, -1, 0x41) & ~1);
     }
     
+    // restore GF1 chan/reg index
+    outpw(devinfo.iobase + 2, regIndex);
+
     return false;   // we're handling EOI by itself
 }
 
