@@ -142,6 +142,9 @@ protected:
     // get play position in DMA buffer in bytes
     virtual int32_t    getPlayPos();
 
+    // advance play/render pointers
+    virtual void        irqAdvancePos();
+
     // get patch table
     virtual snddev_patch_table* getPatchTable(soundFormat fmt);
 

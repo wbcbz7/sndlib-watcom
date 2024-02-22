@@ -236,7 +236,6 @@ bool sndNonDmaBase::setupIrq0() {
     printf("pm_callback - %08X\n", irq0struct->pm_callback);
     printf("rmcount - %08X\n", irq0struct->rmcount);
     printf("pmcount - %08X\n", irq0struct->pmcount);
-    printf("align1 - %08X\n", irq0struct->align1);
     printf("bufferseg - %08X\n", irq0struct->bufferseg);
     printf("bufferofs - %08X\n", irq0struct->bufferofs);
     printf("bufferpos - %08X\n", irq0struct->bufferpos);
@@ -245,15 +244,9 @@ bool sndNonDmaBase::setupIrq0() {
     printf("bufferlentotal - %08X\n", irq0struct->bufferlentotal);
     printf("chain_acc - %08X\n", irq0struct->chain_acc);
 
-    for (size_t i = 0; i < 128; i++) {
-        if ((i & 15) == 0) printf("\n");
-        printf("%02X ", ((uint8_t*)snddev_pcspeaker_irq0_proc_pm)[i]);
-    }
-    for (size_t i = 0; i < 128; i++) {
-        if ((i & 15) == 0) printf("\n");
-        printf("%02X ", ((uint8_t*)realModeISREntry)[i]);
-    }
-    fflush(stdout);
+    printf("dmaBlockSamples - %08X\n", dmaBlockSamples);
+    printf("dmaBufferSize - %08X\n", dmaBufferSize);
+    printf("convinfo.bytesPerSample - %08X\n", convinfo.bytesPerSample);
 #endif
 
     _disable();
@@ -465,9 +458,30 @@ snddev_patch_table* sndNonDmaBase::getPatchTable(soundFormat fmt) {
 int64_t sndNonDmaBase::getPos() {
     // read info from irq0 structure
     if (isPlaying) {
-        return currentPos + irq0struct->bufferpos / convinfo.bytesPerSample;
+        return currentPos + (irq0struct->bufferpos / convinfo.bytesPerSample);
     }
     else return 0;
+}
+
+void sndNonDmaBase::irqAdvancePos() {
+    // recalc render ptr 
+    // NOTE - can be optimized if buffer size/count is power of two, but i'm lazy :)
+    int32_t playPos   = getPlayPos();
+
+    // get next render pointer
+    int32_t playIdx   = (playPos) / dmaBufferSize;
+    if (playIdx >= dmaBufferCount) playIdx -= dmaBufferCount;
+    dmaRenderPtr = (playIdx + 1) * dmaBufferSize;
+    if (dmaRenderPtr >= dmaBlockSize) dmaRenderPtr = 0;
+
+    renderPos += dmaBufferSamples;
+
+    // adjust play position
+    int32_t playpos = playPos / convinfo.bytesPerSample;
+    if (playpos < dmaCurrentPtr) {
+        currentPos += dmaBlockSamples;
+    }
+    dmaCurrentPtr = playpos;
 }
 
 void sndNonDmaBase::callbackBouncer() {
