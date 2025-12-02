@@ -2,7 +2,10 @@ TARGET   = mp2play
 
 BUILD    = dos
 
-# define as dos4g for DOS4GW, pmode for PMODE/W build
+# dos4g for DOS4GW build
+# pmodew for PMODE/W build
+# causeway for Causeway build
+# dos32a for DOS32A build
 SYSTEM   = dos32a
 DEBUG    = all
 
@@ -18,14 +21,20 @@ SNDLIB_PATH = ../..
 
 INCLUDE  = 
 
+!ifdef __UNIX__
+DEL = rm -f
+!else
+DEL = del
+!endif
+
 O        = obj
 C        = cpp
 A        = asm
 
-AS       = nasm.exe
-CC       = wpp386.exe
-LD       = wlink.exe
-CFLAGS   = -5r -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I=$(MP2DEC_PATH);$(SNDLIB_PATH) -DDEBUG_RASTER=$(RASTER)
+AS       = nasm
+CC       = wpp386
+LD       = wlink
+CFLAGS   = -5r -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I="$(MP2DEC_PATH);$(SNDLIB_PATH)" -DDEBUG_RASTER=$(RASTER)
 LFLAGS   =
 AFLAGS   = -f win32
 
@@ -35,7 +44,7 @@ OBJSTR   = file {$(OBJS)}
 TESTOBJ  = test.obj
 TESTOBJSTR  = file {$(TESTOBJ)}
 
-LIBS     = mp2play.lib $(MP2DEC_PATH)\mp2dec.lib $(SNDLIB_PATH)\sndlib.lib
+LIBS     = mp2play.lib $(MP2DEC_PATH)/mp2dec.lib $(SNDLIB_PATH)/sndlib.lib
 LIBSTR   = library {$(LIBS)}
 
 all: $(TARGET).lib $(TARGET).exe .symbolic
@@ -46,7 +55,7 @@ $(TARGET).lib : $(OBJS) .symbolic
 	
 	wlib -n $(TARGET).lib
 	wlib    $(TARGET).lib @$(TARGET).ls
-	del     $(TARGET).ls
+	$(DEL)	$(TARGET).ls
 
 $(TARGET).exe : $(TESTOBJ) .symbolic
 	%write $(TARGET).lnk debug $(DEBUG)
@@ -57,16 +66,16 @@ $(TARGET).exe : $(TESTOBJ) .symbolic
 	%write $(TARGET).lnk $(LIBSTR) 
 	%write $(TARGET).lnk system $(SYSTEM)
 	$(LD) @$(TARGET).lnk $(LFLAGS)
-	del $(TARGET).lnk
+	$(DEL) $(TARGET).lnk
 
 .cpp.obj:
-	$(CC) $< $(CFLAGS)
+	$(CC) $< $(CFLAGS) -fo=$@
 
 .asm.obj:
-	$(AS) $< $(AFLAGS)
+	$(AS) $< $(AFLAGS) -o $@
 	
 # clean all
 clean: .symbolic
-	del *.$(O)
-	del $(TARGET).exe
-	del *.err
+	$(DEL) *.$(O)
+	$(DEL) $(TARGET).exe
+	$(DEL) *.err

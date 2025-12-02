@@ -8,15 +8,21 @@ DLEVEL   = 0
 
 SYSDEF   = WIN32
 
-INCLUDE  = .\include
+INCLUDE  = ./include
+
+!ifdef __UNIX__
+DEL = rm -f
+!else
+DEL = del
+!endif
 
 O        = obj
 C        = cpp
 A        = asm
 
-AS       = nasm.exe
-CC       = wpp386.exe
-LD       = wlink.exe
+AS       = nasm
+CC       = wpp386
+LD       = wlink
 CFLAGS   = -5r -fp5 -fpi87 -zp16 -oneatx -ol+ -s -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
 LFLAGS   =
 AFLAGS   = -f win32
@@ -35,13 +41,13 @@ $(TARGET).lib : $(OBJS) .symbolic
 	
 	wlib -n $(TARGET).lib
 	wlib    $(TARGET).lib @$(TARGET).ls
-	del     $(TARGET).ls
+	$(DEL)  $(TARGET).ls
 	
 .c.obj:
-	$(CC) $< $(CFLAGS)
+	$(CC) $< $(CFLAGS) -fo=$@
 	
 .cpp.obj:
-	$(CC) $< $(CFLAGS)
+	$(CC) $< $(CFLAGS) -fo=$@
 
 .asm.obj:
-	$(AS) $< $(AFLAGS)
+	$(AS) $< $(AFLAGS) -o $@

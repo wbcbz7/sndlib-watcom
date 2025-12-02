@@ -8,11 +8,17 @@ DLEVEL   = 0
 
 SYSDEF   = DOS
 
-INCLUDE  = .\include
+INCLUDE  = ./include
 
-AS       = nasm.exe
-CC       = wpp386.exe
-LD       = wlink.exe
+!ifdef __UNIX__
+DEL = rm -f
+!else
+DEL = del
+!endif
+
+AS       = nasm
+CC       = wpp386
+LD       = wlink
 AFLAGS   = -f win32
 CFLAGS   = -5r -zp16 -onhasbmi -s -zv -d$(DLEVEL) -d_$(SYSDEF) -i=$(INCLUDE) -bt=$(BUILD)
 LFLAGS   =
@@ -32,18 +38,18 @@ $(TARGET).lib : $(OBJS) .symbolic
 	
 	wlib -n $(TARGET).lib
 	wlib    $(TARGET).lib @$(TARGET).ls
-	del     $(TARGET).ls
+	$(DEL)  $(TARGET).ls
 
 # custom rule to enable "option eliminate"
 dpmi.obj:
-	$(CC) dpmi.cpp $(CFLAGS) -zm
+	$(CC) dpmi.cpp $(CFLAGS) -zm -fo=$@
 dma.obj:
-	$(CC) dma.cpp $(CFLAGS) -zm
+	$(CC) dma.cpp $(CFLAGS) -zm -fo=$@
 tinypci.obj:
-	$(CC) tinypci.cpp $(CFLAGS) -zm
+	$(CC) tinypci.cpp $(CFLAGS) -zm -fo=$@
 	
 .cpp.obj:
-	$(CC) $< $(CFLAGS)
+	$(CC) $< $(CFLAGS) -fo=$@
 
 .asm.obj:
-	$(AS) $< $(AFLAGS)
+	$(AS) $< $(AFLAGS) -o $@

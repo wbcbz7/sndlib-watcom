@@ -2,7 +2,10 @@ TARGET   = imaplay
 
 BUILD    = dos
 
-# define as dos4g for DOS4GW, pmode for PMODE/W build
+# dos4g for DOS4GW build
+# pmodew for PMODE/W build
+# causeway for Causeway build
+# dos32a for DOS32A build
 SYSTEM   = dos32a
 DEBUG    = all
 
@@ -20,6 +23,12 @@ SNDLIB_PATH = ../..
 
 INCLUDE  = 
 
+!ifdef __UNIX__
+DEL = rm -f
+!else
+DEL = del
+!endif
+
 O        = obj
 C        = cpp
 A        = asm
@@ -27,7 +36,7 @@ A        = asm
 AS       = nasm.exe
 CC       = wpp386.exe
 LD       = wlink.exe
-CFLAGS   = -5r -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I=$(SNDLIB_PATH);$(INCLUDE) -DDEBUG_RASTER=$(RASTER) -DUSE_C_DECODERS=$(USE_C_DECODERS)
+CFLAGS   = -5r -zp16 -oneatx -s -d$(DLEVEL) -bt=$(BUILD) -I="$(SNDLIB_PATH);$(INCLUDE)" -DDEBUG_RASTER=$(RASTER) -DUSE_C_DECODERS=$(USE_C_DECODERS)
 LFLAGS   =
 AFLAGS   = -f win32 -dUSE_C_DECODERS=$(USE_C_DECODERS)
 
@@ -37,7 +46,7 @@ OBJSTR   = file {$(OBJS)}
 TESTOBJ  = test.obj
 TESTOBJSTR  = file {$(TESTOBJ)}
 
-LIBS     = imaplay.lib $(SNDLIB_PATH)\sndlib.lib
+LIBS     = imaplay.lib $(SNDLIB_PATH)/sndlib.lib
 LIBSTR   = library {$(LIBS)}
 
 all: $(TARGET).lib $(TARGET).exe .symbolic
@@ -59,7 +68,7 @@ $(TARGET).exe : $(TESTOBJ) .symbolic
 	%write $(TARGET).lnk $(LIBSTR) 
 	%write $(TARGET).lnk system $(SYSTEM)
 	$(LD) @$(TARGET).lnk $(LFLAGS)
-	del $(TARGET).lnk
+	$(DEL) $(TARGET).lnk
 
 .cpp.obj:
 	$(CC) $< $(CFLAGS)
@@ -69,6 +78,6 @@ $(TARGET).exe : $(TESTOBJ) .symbolic
 	
 # clean all
 clean: .symbolic
-	del *.$(O)
-	del $(TARGET).exe
-	del *.err
+	$(DEL) *.$(O)
+	$(DEL) $(TARGET).exe
+	$(DEL) *.err
